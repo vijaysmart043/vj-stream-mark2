@@ -150,7 +150,7 @@ fun MainStreamingScreen(
             .background(ObsidianBg)
             .statusBarsPadding()
             .navigationBarsPadding()
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
             .testTag("main_streaming_screen")
     ) {
         // Main Landscape Layout
@@ -162,7 +162,7 @@ fun MainStreamingScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(36.dp),
+                    .height(28.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -170,37 +170,37 @@ fun MainStreamingScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(26.dp)
-                            .background(StreamRed, RoundedCornerShape(6.dp)),
+                            .size(22.dp)
+                            .background(StreamRed, RoundedCornerShape(5.dp)),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = Icons.Default.Videocam,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(14.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = "VJStream",
                         color = Color.White,
-                        fontSize = 15.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
+                        letterSpacing = 0.4.sp
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(5.dp))
                     Box(
                         modifier = Modifier
-                            .background(Color(0x33475569), RoundedCornerShape(4.dp))
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                            .background(Color(0x33475569), RoundedCornerShape(3.dp))
+                            .padding(horizontal = 4.dp, vertical = 1.dp)
                     ) {
                         Text(
                             text = "STUDIO MODE",
                             color = StreamCyan,
-                            fontSize = 9.sp,
+                            fontSize = 8.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.8.sp
+                            letterSpacing = 0.6.sp
                         )
                     }
                 }
@@ -209,7 +209,7 @@ fun MainStreamingScreen(
                 Text(
                     text = streamStats.statusMessage,
                     color = Color(0xFF94A3B8),
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontWeight = FontWeight.Medium
                 )
 
@@ -220,7 +220,7 @@ fun MainStreamingScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
             // 2. Center Studio Mode: Preview (Left) + Program (Right) Panes
             Box(
@@ -244,7 +244,7 @@ fun MainStreamingScreen(
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
-                                .padding(6.dp)
+                                .padding(4.dp)
                         ) {
                             AudioLevelMeter(
                                 audioState = audioState,
@@ -259,7 +259,7 @@ fun MainStreamingScreen(
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopStart)
-                                .padding(6.dp)
+                                .padding(4.dp)
                         ) {
                             VideoEncoderOverlay(
                                 encoderState = encoderState,
@@ -282,7 +282,7 @@ fun MainStreamingScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .align(Alignment.BottomCenter)
-                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                                .padding(horizontal = 4.dp, vertical = 3.dp)
                         ) {
                             TelemetryHud(
                                 stats = streamStats,
@@ -301,39 +301,39 @@ fun MainStreamingScreen(
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = 10.dp)
-                            .background(Color(0xE67F1D1D), RoundedCornerShape(8.dp))
-                            .border(1.dp, StreamRed, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .padding(top = 6.dp)
+                            .background(Color(0xE67F1D1D), RoundedCornerShape(6.dp))
+                            .border(1.dp, StreamRed, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MicOff,
                                 contentDescription = null,
                                 tint = Color.White,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                             Text(
                                 text = "Microphone permission is required for live audio.",
                                 color = Color.White,
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Button(
                                 onClick = onRequestAudioPermission,
                                 colors = ButtonDefaults.buttonColors(containerColor = StreamRed),
                                 shape = RoundedCornerShape(4.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                                 modifier = Modifier
-                                    .height(28.dp)
+                                    .height(24.dp)
                                     .testTag("grant_mic_permission_button")
                             ) {
                                 Text(
-                                    text = "GRANT MICROPHONE PERMISSION",
-                                    fontSize = 10.sp,
+                                    text = "GRANT PERMISSION",
+                                    fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -342,7 +342,7 @@ fun MainStreamingScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
             // 3. Bottom Control Bar
             ControlBar(

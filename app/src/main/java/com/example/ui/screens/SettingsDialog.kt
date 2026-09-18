@@ -1,11 +1,13 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -99,16 +101,16 @@ fun SettingsDialog(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0x99000000))
-                .padding(horizontal = 24.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .fillMaxHeight()
-                    .background(ObsidianSurface, RoundedCornerShape(12.dp))
-                    .border(1.dp, ObsidianBorder, RoundedCornerShape(12.dp))
-                    .padding(16.dp)
+                    .background(ObsidianSurface, RoundedCornerShape(10.dp))
+                    .border(1.dp, ObsidianBorder, RoundedCornerShape(10.dp))
+                    .padding(10.dp)
             ) {
                 // Header
                 Row(
@@ -118,52 +120,56 @@ fun SettingsDialog(
                 ) {
                     Text(
                         text = "VJStream Studio Settings",
-                        fontSize = 18.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
 
-                    IconButton(onClick = onDismiss) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(28.dp)
+                    ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = "Close Settings",
-                            tint = Color.White
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
                 // Landscape 2-column layout
                 Row(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     // Left Column: YouTube RTMP Setup
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .background(ObsidianSurfaceVariant, RoundedCornerShape(8.dp))
-                            .border(1.dp, ObsidianBorder, RoundedCornerShape(8.dp))
-                            .padding(12.dp)
+                            .background(ObsidianSurfaceVariant, RoundedCornerShape(6.dp))
+                            .border(1.dp, ObsidianBorder, RoundedCornerShape(6.dp))
+                            .padding(8.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
                         Text(
                             text = "YOUTUBE LIVE CONFIGURATION",
-                            fontSize = 12.sp,
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = StreamCyan,
-                            letterSpacing = 0.5.sp
+                            letterSpacing = 0.4.sp
                         )
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
                             text = "Server URL (RTMP/RTMPS)",
-                            fontSize = 11.sp,
+                            fontSize = 9.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF94A3B8)
                         )
@@ -172,7 +178,7 @@ fun SettingsDialog(
                             onValueChange = { serverUrl = it },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 4.dp)
+                                .padding(top = 2.dp)
                                 .testTag("server_url_input"),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = StreamCyan,
@@ -180,15 +186,15 @@ fun SettingsDialog(
                                 focusedTextColor = Color.White,
                                 unfocusedTextColor = Color.White
                             ),
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(6.dp),
                             singleLine = true
                         )
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         Text(
                             text = "Stream Key (from YouTube Studio)",
-                            fontSize = 11.sp,
+                            fontSize = 9.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF94A3B8)
                         )
@@ -197,15 +203,19 @@ fun SettingsDialog(
                             onValueChange = { streamKey = it },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 4.dp)
+                                .padding(top = 2.dp)
                                 .testTag("stream_key_input"),
                             visualTransformation = if (showStreamKey) VisualTransformation.None else PasswordVisualTransformation(),
                             trailingIcon = {
-                                IconButton(onClick = { showStreamKey = !showStreamKey }) {
+                                IconButton(
+                                    onClick = { showStreamKey = !showStreamKey },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
                                     Icon(
                                         imageVector = if (showStreamKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                         contentDescription = if (showStreamKey) "Hide key" else "Show key",
-                                        tint = Color.White
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
                                     )
                                 }
                             },
@@ -215,15 +225,15 @@ fun SettingsDialog(
                                 focusedTextColor = Color.White,
                                 unfocusedTextColor = Color.White
                             ),
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(6.dp),
                             singleLine = true
                         )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         // YouTube Stream Configuration Actions: Save and Clear
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Button(
@@ -246,14 +256,15 @@ fun SettingsDialog(
                                         youtubeSaveMessage = "Configuration Saved"
                                     }
                                 },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.testTag("youtube_save_button"),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(30.dp).testTag("youtube_save_button"),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = StreamCyan,
                                     contentColor = Color.Black
                                 )
                             ) {
-                                Text("Save", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Save", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                             }
 
                             OutlinedButton(
@@ -268,36 +279,35 @@ fun SettingsDialog(
                                     )
                                     onSaveConfig(candidate)
                                 },
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.testTag("youtube_clear_button"),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(30.dp).testTag("youtube_clear_button"),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444)),
-                                border = ButtonDefaults.outlinedButtonBorder.copy(
-                                    brush = androidx.compose.ui.graphics.SolidColor(Color(0xFFEF4444))
-                                )
+                                border = BorderStroke(1.dp, Color(0xFFEF4444))
                             ) {
-                                Text("Clear", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text("Clear", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
                             }
                         }
 
                         if (youtubeValidationError != null) {
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = youtubeValidationError!!,
-                                fontSize = 11.sp,
+                                fontSize = 9.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = StreamRed
                             )
                         } else if (youtubeSaveMessage != null) {
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
                                 text = youtubeSaveMessage!!,
-                                fontSize = 11.sp,
+                                fontSize = 9.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = StreamGreen
                             )
                         }
 
-                        Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         // Test Connection Button
                         Row(
@@ -316,37 +326,36 @@ fun SettingsDialog(
                                     }
                                 },
                                 enabled = !isTestingConnection && serverUrl.isNotBlank(),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier.testTag("test_connection_button"),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(30.dp).testTag("test_connection_button"),
                                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                                border = ButtonDefaults.outlinedButtonBorder.copy(
-                                    brush = androidx.compose.ui.graphics.SolidColor(Color(0xFF334155))
-                                )
+                                border = BorderStroke(1.dp, Color(0xFF334155))
                             ) {
                                 if (isTestingConnection) {
                                     CircularProgressIndicator(
-                                        modifier = Modifier.size(14.dp),
-                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.size(12.dp),
+                                        strokeWidth = 1.5.dp,
                                         color = Color.White
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Testing...", fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Testing...", fontSize = 10.sp)
                                 } else {
                                     Icon(
                                         imageVector = Icons.Default.Wifi,
                                         contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
+                                        modifier = Modifier.size(14.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Test Connection", fontSize = 12.sp)
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Test Connection", fontSize = 10.sp)
                                 }
                             }
 
                             if (testResult != null) {
-                                Spacer(modifier = Modifier.width(10.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = testResult!!,
-                                    fontSize = 11.sp,
+                                    fontSize = 9.5.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (testSuccess == true) StreamGreen else StreamRed
                                 )
@@ -359,23 +368,23 @@ fun SettingsDialog(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .background(ObsidianSurfaceVariant, RoundedCornerShape(8.dp))
-                            .border(1.dp, ObsidianBorder, RoundedCornerShape(8.dp))
-                            .padding(12.dp)
+                            .background(ObsidianSurfaceVariant, RoundedCornerShape(6.dp))
+                            .border(1.dp, ObsidianBorder, RoundedCornerShape(6.dp))
+                            .padding(8.dp)
                             .verticalScroll(rememberScrollState())
                     ) {
                         Text(
                             text = "VIDEO PRESETS",
-                            fontSize = 12.sp,
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = StreamCyan,
-                            letterSpacing = 0.5.sp
+                            letterSpacing = 0.4.sp
                         )
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         // Preset chips / cards
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             VideoPresets.ALL.forEach { preset ->
                                 val isSelected = preset == selectedPreset
                                 Row(
@@ -383,35 +392,35 @@ fun SettingsDialog(
                                         .fillMaxWidth()
                                         .background(
                                             if (isSelected) Color(0x33EF4444) else Color(0x220F172A),
-                                            RoundedCornerShape(6.dp)
+                                            RoundedCornerShape(5.dp)
                                         )
                                         .border(
                                             1.dp,
                                             if (isSelected) StreamRed else Color(0xFF334155),
-                                            RoundedCornerShape(6.dp)
+                                            RoundedCornerShape(5.dp)
                                         )
                                         .clickable { selectedPreset = preset }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column {
                                         Text(
                                             text = preset.name,
-                                            fontSize = 12.sp,
+                                            fontSize = 10.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = if (isSelected) Color.White else Color(0xFFCBD5E1)
                                         )
                                         Text(
                                             text = "${preset.resolutionLabel} • ${preset.fps} FPS • ${preset.bitrateLabel}",
-                                            fontSize = 10.sp,
+                                            fontSize = 8.5.sp,
                                             color = Color(0xFF94A3B8)
                                         )
                                     }
                                     if (isSelected) {
                                         Text(
                                             text = "ACTIVE",
-                                            fontSize = 10.sp,
+                                            fontSize = 8.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = StreamRed
                                         )
@@ -420,24 +429,24 @@ fun SettingsDialog(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         Text(
                             text = "AUDIO & HARDWARE",
-                            fontSize = 12.sp,
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = StreamCyan,
-                            letterSpacing = 0.5.sp
+                            letterSpacing = 0.4.sp
                         )
 
-                        Spacer(modifier = Modifier.height(6.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "Capture Microphone", fontSize = 12.sp, color = Color.White)
+                            Text(text = "Capture Microphone", fontSize = 10.5.sp, color = Color.White)
                             Switch(
                                 checked = micEnabled,
                                 onCheckedChange = { micEnabled = it },
@@ -453,7 +462,7 @@ fun SettingsDialog(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "Keep Screen Awake", fontSize = 12.sp, color = Color.White)
+                            Text(text = "Keep Screen Awake", fontSize = 10.5.sp, color = Color.White)
                             Switch(
                                 checked = keepScreenAwake,
                                 onCheckedChange = { keepScreenAwake = it },
@@ -469,7 +478,7 @@ fun SettingsDialog(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "Auto-Start Camera", fontSize = 12.sp, color = Color.White)
+                            Text(text = "Auto-Start Camera", fontSize = 10.5.sp, color = Color.White)
                             Switch(
                                 checked = autoStartCamera,
                                 onCheckedChange = { autoStartCamera = it },
@@ -482,7 +491,7 @@ fun SettingsDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Footer Save Actions
                 Row(
@@ -492,16 +501,16 @@ fun SettingsDialog(
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                        modifier = Modifier.height(32.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF94A3B8)),
-                        border = ButtonDefaults.outlinedButtonBorder.copy(
-                            brush = androidx.compose.ui.graphics.SolidColor(Color(0xFF334155))
-                        )
+                        border = BorderStroke(1.dp, Color(0xFF334155))
                     ) {
-                        Text("Cancel")
+                        Text("Cancel", fontSize = 11.sp)
                     }
 
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
 
                     Button(
                         onClick = {
@@ -525,14 +534,15 @@ fun SettingsDialog(
                             onSaveConfig(newConfig)
                             onDismiss()
                         },
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.testTag("save_settings_button"),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                        modifier = Modifier.height(32.dp).testTag("save_settings_button"),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = StreamRed,
                             contentColor = Color.White
                         )
                     ) {
-                        Text("Save Settings", fontWeight = FontWeight.Bold)
+                        Text("Save Settings", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

@@ -79,19 +79,19 @@ fun AudioLevelMeter(
 
     Row(
         modifier = modifier
-            .background(Color(0xE60E121B), RoundedCornerShape(8.dp))
-            .border(1.dp, Color(0x33475569), RoundedCornerShape(8.dp))
-            .padding(horizontal = 10.dp, vertical = 5.dp)
+            .background(Color(0xE60E121B), RoundedCornerShape(6.dp))
+            .border(1.dp, Color(0x33475569), RoundedCornerShape(6.dp))
+            .padding(horizontal = 7.dp, vertical = 3.dp)
             .testTag("audio_level_meter"),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         // Microphone Icon
         Icon(
             imageVector = if (audioState.isMuted || audioState == AudioState.OFF) Icons.Default.MicOff else Icons.Default.Mic,
             contentDescription = "Microphone Status",
             tint = statusColor,
-            modifier = Modifier.width(16.dp).height(16.dp)
+            modifier = Modifier.width(13.dp).height(13.dp)
         )
 
         // Status Text (MIC: ON, MIC: OFF, MIC: INITIALIZING, MIC: ERROR)
@@ -99,32 +99,32 @@ fun AudioLevelMeter(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = audioState.displayLabel,
-                    fontSize = 11.sp,
+                    fontSize = 9.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = statusColor,
-                    letterSpacing = 0.5.sp,
+                    letterSpacing = 0.4.sp,
                     modifier = Modifier.testTag("audio_status_label")
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "${sampleRate / 1000}kHz ${if (channelCount == 1) "Mono" else "Stereo"}",
-                    fontSize = 9.sp,
+                    fontSize = 8.sp,
                     color = Color(0xFF64748B),
                     fontWeight = FontWeight.Medium
                 )
             }
 
-            Spacer(modifier = Modifier.height(3.dp))
+            Spacer(modifier = Modifier.height(2.dp))
 
             // ASCII Meter String + Segmented Color Bar
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 // Exact textual block representation matching Prompt requirement
                 Text(
                     text = meterBlocks,
-                    fontSize = 10.sp,
+                    fontSize = 8.5.sp,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     color = if (smoothLevel > 0.85f) StreamRed else if (smoothLevel > 0.6f) StreamYellow else StreamGreen,
@@ -134,12 +134,12 @@ fun AudioLevelMeter(
                 // High-polish segmented VU meter track
                 Box(
                     modifier = Modifier
-                        .width(72.dp)
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp))
+                        .width(48.dp)
+                        .height(4.5.dp)
+                        .clip(RoundedCornerShape(2.dp))
                         .background(Color(0xFF1E293B))
                 ) {
-                    val progressWidth = (smoothLevel * 72).dp
+                    val progressWidth = (smoothLevel * 48).dp
                     Box(
                         modifier = Modifier
                             .width(progressWidth)

@@ -89,9 +89,9 @@ fun TelemetryHud(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xCC0E121B), RoundedCornerShape(8.dp))
-            .border(1.dp, Color(0x33475569), RoundedCornerShape(8.dp))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .background(Color(0xCC0E121B), RoundedCornerShape(6.dp))
+            .border(1.dp, Color(0x33475569), RoundedCornerShape(6.dp))
+            .padding(horizontal = 6.dp, vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -108,7 +108,7 @@ fun TelemetryHud(
         )
 
         TelemetryItem(
-            label = "RESOLUTION",
+            label = "RES",
             value = preset.resolutionLabel,
             valueColor = Color.White
         )
@@ -127,11 +127,11 @@ fun TelemetryHud(
         TelemetryItem(
             label = "AAC",
             value = when (audioEncoderState) {
-                AudioEncoderState.ENCODING -> "ENCODING"
+                AudioEncoderState.ENCODING -> "ENC"
                 AudioEncoderState.READY -> "READY"
                 AudioEncoderState.INITIALIZING -> "INIT"
-                AudioEncoderState.ERROR -> "ERROR"
-                AudioEncoderState.STOPPING -> "STOPPING"
+                AudioEncoderState.ERROR -> "ERR"
+                AudioEncoderState.STOPPING -> "STOP"
                 AudioEncoderState.IDLE -> "OFF"
             },
             valueColor = when (audioEncoderState) {
@@ -165,13 +165,13 @@ fun TelemetryHud(
         )
 
         TelemetryItem(
-            label = "DROPPED",
+            label = "DROP",
             value = "${stats.droppedFrames}",
             valueColor = if (stats.droppedFrames > 10) StreamYellow else Color.White
         )
 
         TelemetryItem(
-            label = "NETWORK",
+            label = "NET",
             value = stats.networkStatus.name,
             valueColor = netColor
         )
@@ -191,14 +191,14 @@ fun TelemetryItem(
     ) {
         Text(
             text = label,
-            fontSize = 9.sp,
+            fontSize = 7.5.sp,
             fontWeight = FontWeight.Bold,
             color = Color(0xFF94A3B8),
-            letterSpacing = 0.5.sp
+            letterSpacing = 0.4.sp
         )
         Text(
             text = value,
-            fontSize = 12.sp,
+            fontSize = 9.5.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace,
             color = valueColor

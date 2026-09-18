@@ -1,8 +1,10 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -58,41 +60,40 @@ fun ControlBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xE60E121B), RoundedCornerShape(10.dp))
-            .border(1.dp, Color(0x33475569), RoundedCornerShape(10.dp))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .background(Color(0xE60E121B), RoundedCornerShape(8.dp))
+            .border(1.dp, Color(0x33475569), RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         // Left side quick action buttons
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Camera switch button
             OutlinedButton(
                 onClick = onSwitchCamera,
                 modifier = Modifier
-                    .height(42.dp)
+                    .height(34.dp)
                     .testTag("switch_camera_button"),
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(6.dp),
+                contentPadding = PaddingValues(horizontal = 7.dp, vertical = 2.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = Color(0x221E293B),
                     contentColor = Color.White
                 ),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(Color(0xFF334155))
-                )
+                border = BorderStroke(1.dp, Color(0xFF334155))
             ) {
                 Icon(
                     imageVector = Icons.Default.Cameraswitch,
                     contentDescription = "Switch Camera",
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(15.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = if (isFrontCamera) "Front" else "Rear",
-                    fontSize = 12.sp,
+                    fontSize = 10.5.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -101,28 +102,28 @@ fun ControlBar(
             OutlinedButton(
                 onClick = onToggleMic,
                 modifier = Modifier
-                    .height(42.dp)
+                    .height(34.dp)
                     .testTag("toggle_mic_button"),
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(6.dp),
+                contentPadding = PaddingValues(horizontal = 7.dp, vertical = 2.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = if (isMicMuted) Color(0x33EF4444) else Color(0x221E293B),
                     contentColor = if (isMicMuted) StreamRed else StreamGreen
                 ),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(
-                        if (isMicMuted) StreamRed.copy(alpha = 0.5f) else Color(0xFF334155)
-                    )
+                border = BorderStroke(
+                    1.dp,
+                    if (isMicMuted) StreamRed.copy(alpha = 0.5f) else Color(0xFF334155)
                 )
             ) {
                 Icon(
                     imageVector = if (isMicMuted) Icons.Default.MicOff else Icons.Default.Mic,
                     contentDescription = "Toggle Mic",
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(15.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = if (isMicMuted) "MIC OFF" else "MIC ON",
-                    fontSize = 12.sp,
+                    fontSize = 10.5.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -132,29 +133,29 @@ fun ControlBar(
                 OutlinedButton(
                     onClick = onToggleEncoderTest,
                     modifier = Modifier
-                        .height(42.dp)
+                        .height(34.dp)
                         .testTag("toggle_encoder_test_bar_button"),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = 7.dp, vertical = 2.dp),
                     colors = ButtonDefaults.outlinedButtonColors(
                         containerColor = if (isEncoderTesting) Color(0x3310B981) else Color(0x221E293B),
                         contentColor = if (isEncoderTesting) StreamGreen else Color.White
                     ),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(
-                        brush = androidx.compose.ui.graphics.SolidColor(
-                            if (isEncoderTesting) StreamGreen.copy(alpha = 0.6f) else Color(0xFF334155)
-                        )
+                    border = BorderStroke(
+                        1.dp,
+                        if (isEncoderTesting) StreamGreen.copy(alpha = 0.6f) else Color(0xFF334155)
                     )
                 ) {
                     Icon(
                         imageVector = Icons.Default.Hardware,
                         contentDescription = "Test H.264 Video Encoder",
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(15.dp),
                         tint = if (isEncoderTesting) StreamGreen else StreamCyan
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = if (isEncoderTesting) "ENC ON" else "ENC TEST",
-                        fontSize = 12.sp,
+                        fontSize = 10.5.sp,
                         fontWeight = FontWeight.Bold
                     )
                 }
@@ -164,27 +165,26 @@ fun ControlBar(
             OutlinedButton(
                 onClick = onOpenYouTubeConfig,
                 modifier = Modifier
-                    .height(42.dp)
+                    .height(34.dp)
                     .testTag("youtube_setup_button"),
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(6.dp),
+                contentPadding = PaddingValues(horizontal = 7.dp, vertical = 2.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = Color(0x221E293B),
                     contentColor = Color.White
                 ),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(Color(0xFF334155))
-                )
+                border = BorderStroke(1.dp, Color(0xFF334155))
             ) {
                 Icon(
                     imageVector = Icons.Default.VpnKey,
                     contentDescription = "YouTube Setup",
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(15.dp),
                     tint = Color(0xFFFF4E45)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "YouTube",
-                    fontSize = 12.sp,
+                    fontSize = 10.5.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -193,26 +193,25 @@ fun ControlBar(
             OutlinedButton(
                 onClick = onOpenSettings,
                 modifier = Modifier
-                    .height(42.dp)
+                    .height(34.dp)
                     .testTag("settings_button"),
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(6.dp),
+                contentPadding = PaddingValues(horizontal = 7.dp, vertical = 2.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     containerColor = Color(0x221E293B),
                     contentColor = Color.White
                 ),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(Color(0xFF334155))
-                )
+                border = BorderStroke(1.dp, Color(0xFF334155))
             ) {
                 Icon(
                     imageVector = Icons.Default.Settings,
                     contentDescription = "Settings",
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(15.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text(
                     text = "Settings",
-                    fontSize = 12.sp,
+                    fontSize = 10.5.sp,
                     fontWeight = FontWeight.SemiBold
                 )
             }
@@ -224,9 +223,10 @@ fun ControlBar(
                 Button(
                     onClick = onStopStream,
                     modifier = Modifier
-                        .height(44.dp)
+                        .height(34.dp)
                         .testTag("stop_stream_button"),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = StreamRedDark,
                         contentColor = Color.White
@@ -235,14 +235,14 @@ fun ControlBar(
                     Icon(
                         imageVector = Icons.Default.Stop,
                         contentDescription = "Stop Streaming",
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "STOP STREAM",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        letterSpacing = 0.5.sp
+                        fontSize = 11.sp,
+                        letterSpacing = 0.4.sp
                     )
                 }
             }
@@ -251,24 +251,25 @@ fun ControlBar(
                     onClick = {},
                     enabled = false,
                     modifier = Modifier
-                        .height(44.dp)
+                        .height(34.dp)
                         .testTag("connecting_button"),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                     colors = ButtonDefaults.buttonColors(
                         disabledContainerColor = Color(0xFF334155),
                         disabledContentColor = Color.White
                     )
                 ) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(14.dp),
                         strokeWidth = 2.dp,
                         color = Color.White
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = if (status == StreamStatus.STOPPING) "STOPPING..." else "CONNECTING...",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
+                        fontSize = 10.5.sp
                     )
                 }
             }
@@ -276,9 +277,10 @@ fun ControlBar(
                 Button(
                     onClick = onStartStream,
                     modifier = Modifier
-                        .height(44.dp)
+                        .height(34.dp)
                         .testTag("start_stream_button"),
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = StreamRed,
                         contentColor = Color.White
@@ -287,14 +289,14 @@ fun ControlBar(
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = "Start Stream",
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(16.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "START STREAM",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        letterSpacing = 0.5.sp
+                        fontSize = 11.sp,
+                        letterSpacing = 0.4.sp
                     )
                 }
             }

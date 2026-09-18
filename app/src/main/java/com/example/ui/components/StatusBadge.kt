@@ -114,34 +114,34 @@ fun StatusBadge(
 
     Row(
         modifier = modifier
-            .background(badgeBg, RoundedCornerShape(8.dp))
-            .border(1.dp, badgeBorder, RoundedCornerShape(8.dp))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+            .background(badgeBg, RoundedCornerShape(6.dp))
+            .border(1.dp, badgeBorder, RoundedCornerShape(6.dp))
+            .padding(horizontal = 7.dp, vertical = 3.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
             modifier = Modifier
-                .size(9.dp)
+                .size(6.dp)
                 .alpha(if (status.isStreaming) alphaAnim else 1.0f)
                 .background(dotColor, CircleShape)
         )
-        Spacer(modifier = Modifier.width(6.dp))
+        Spacer(modifier = Modifier.width(5.dp))
         Text(
             text = labelText,
             color = Color.White,
             fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            letterSpacing = 0.8.sp
+            fontSize = 10.5.sp,
+            letterSpacing = 0.6.sp
         )
 
         if (status == StreamStatus.LIVE && durationText.isNotBlank()) {
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
                 text = durationText,
                 color = Color.White,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 12.sp
+                fontSize = 10.5.sp
             )
         }
     }

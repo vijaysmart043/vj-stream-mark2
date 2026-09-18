@@ -51,19 +51,19 @@ fun VideoEncoderOverlay(
 
     Box(
         modifier = modifier
-            .background(Color(0xD90A0E17), RoundedCornerShape(8.dp))
-            .border(1.dp, Color(0x33475569), RoundedCornerShape(8.dp))
-            .padding(horizontal = 10.dp, vertical = 6.dp)
+            .background(Color(0xD90A0E17), RoundedCornerShape(6.dp))
+            .border(1.dp, Color(0x33475569), RoundedCornerShape(6.dp))
+            .padding(horizontal = 7.dp, vertical = 3.dp)
             .testTag("video_encoder_overlay")
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             // Status dot
             Box(
                 modifier = Modifier
-                    .size(8.dp)
+                    .size(6.dp)
                     .background(stateColor, CircleShape)
             )
 
@@ -71,11 +71,11 @@ fun VideoEncoderOverlay(
             Column {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
                         text = "AVC/H.264",
-                        fontSize = 11.sp,
+                        fontSize = 9.5.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White
                     )
@@ -83,13 +83,13 @@ fun VideoEncoderOverlay(
                     if (encoderStats.isHardwareAccelerated) {
                         Box(
                             modifier = Modifier
-                                .background(Color(0x3310B981), RoundedCornerShape(3.dp))
-                                .border(1.dp, StreamGreen.copy(alpha = 0.5f), RoundedCornerShape(3.dp))
-                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                .background(Color(0x3310B981), RoundedCornerShape(2.dp))
+                                .border(1.dp, StreamGreen.copy(alpha = 0.5f), RoundedCornerShape(2.dp))
+                                .padding(horizontal = 3.dp, vertical = 0.5.dp)
                         ) {
                             Text(
                                 text = "HW",
-                                fontSize = 9.sp,
+                                fontSize = 7.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = StreamGreen
                             )
@@ -98,7 +98,7 @@ fun VideoEncoderOverlay(
 
                     Text(
                         text = encoderState.name,
-                        fontSize = 10.sp,
+                        fontSize = 8.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
                         color = stateColor
@@ -108,14 +108,14 @@ fun VideoEncoderOverlay(
                 if (encoderState == VideoEncoderState.ENCODING) {
                     Text(
                         text = "${String.format("%.1f", encoderStats.currentFps)} fps • ${encoderStats.bitrateLabel} • ${encoderStats.keyframeCount} keys",
-                        fontSize = 10.sp,
+                        fontSize = 8.5.sp,
                         fontFamily = FontFamily.Monospace,
                         color = Color(0xFF94A3B8)
                     )
                 } else {
                     Text(
                         text = if (encoderStats.encoderName != "None") encoderStats.encoderName else "H.264 Hardware Encoder",
-                        fontSize = 10.sp,
+                        fontSize = 8.5.sp,
                         color = Color(0xFF94A3B8),
                         maxLines = 1
                     )
@@ -126,10 +126,10 @@ fun VideoEncoderOverlay(
             IconButton(
                 onClick = onToggleTest,
                 modifier = Modifier
-                    .size(28.dp)
+                    .size(22.dp)
                     .background(
                         if (isTestActive) Color(0x33EF4444) else Color(0x22334155),
-                        RoundedCornerShape(6.dp)
+                        RoundedCornerShape(4.dp)
                     )
                     .testTag("toggle_encoder_test_button")
             ) {
@@ -137,7 +137,7 @@ fun VideoEncoderOverlay(
                     imageVector = if (isTestActive) Icons.Default.Stop else Icons.Default.PlayArrow,
                     contentDescription = if (isTestActive) "Stop Encoder Test" else "Test Encoder",
                     tint = if (isTestActive) StreamRed else Color.White,
-                    modifier = Modifier.size(16.dp)
+                    modifier = Modifier.size(13.dp)
                 )
             }
         }
