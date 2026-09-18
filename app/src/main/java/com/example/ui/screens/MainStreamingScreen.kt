@@ -2,6 +2,9 @@ package com.example.ui.screens
 
 import android.app.Activity
 import android.view.WindowManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -27,13 +30,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Videocam
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -52,23 +51,22 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.example.camera.CameraManager
 import com.example.settings.SettingsRepository
 import com.example.streaming.StreamingManager
 import com.example.streaming.StreamingService
-import com.example.streaming.audio.AudioState
 import com.example.streaming.encoder.VideoEncoderState
+import com.example.studio.StudioManager
 import com.example.ui.components.AudioLevelMeter
 import com.example.ui.components.ControlBar
 import com.example.ui.components.StatusBadge
+import com.example.ui.components.StudioPanes
 import com.example.ui.components.TelemetryHud
 import com.example.ui.components.VideoEncoderOverlay
 import com.example.ui.theme.ObsidianBg
 import com.example.ui.theme.StreamCyan
 import com.example.ui.theme.StreamGreen
 import com.example.ui.theme.StreamRed
-import com.example.youtube.YouTubeStreamConfig
 import com.example.youtube.YouTubeStreamValidator
 
 @Composable
@@ -76,6 +74,7 @@ fun MainStreamingScreen(
     cameraManager: CameraManager?,
     streamingManager: StreamingManager,
     settingsRepository: SettingsRepository,
+    studioManager: StudioManager,
     hasCameraPermission: Boolean,
     hasAudioPermission: Boolean,
     onRequestPermissions: () -> Unit,
@@ -86,16 +85,29 @@ fun MainStreamingScreen(
     val streamStats by streamingManager.statsFlow.collectAsState()
     val streamConfig by settingsRepository.configFlow.collectAsState()
     val streamError by streamingManager.errorMessageFlow.collectAsState()
+    val studioState by studioManager.studioStateFlow.collectAsState()
 
     val audioState by streamingManager.audioCaptureManager.stateFlow.collectAsState()
     val audioLevel by streamingManager.audioCaptureManager.audioLevelFlow.collectAsState()
     val peakLevel by streamingManager.audioCaptureManager.peakLevelFlow.collectAsState()
-    val audioError by streamingManager.audioCaptureManager.errorMessageFlow.collectAsState()
 
     val encoderState by streamingManager.encoderStateFlow.collectAsState()
     val encoderStats by streamingManager.encoderStatsFlow.collectAsState()
     val audioEncoderState by streamingManager.audioEncoderStateFlow.collectAsState()
     var isEncoderTesting by remember { mutableStateOf(false) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            studioManager.setPreviewImage(
+                context = context,
+                uri = uri,
+                targetWidth = streamConfig.videoPreset.width,
+                targetHeight = streamConfig.videoPreset.height
+            )
+        }
+    }
 
     LaunchedEffect(streamStatus) {
         if (streamStatus.isStreaming) {
@@ -150,7 +162,7 @@ fun MainStreamingScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(38.dp),
+                    .height(36.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -158,7 +170,7 @@ fun MainStreamingScreen(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(28.dp)
+                            .size(26.dp)
                             .background(StreamRed, RoundedCornerShape(6.dp)),
                         contentAlignment = Alignment.Center
                     ) {
@@ -166,25 +178,31 @@ fun MainStreamingScreen(
                             imageVector = Icons.Default.Videocam,
                             contentDescription = null,
                             tint = Color.White,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(16.dp)
                         )
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "VJStream",
                         color = Color.White,
-                        fontSize = 16.sp,
+                        fontSize = 15.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 0.5.sp
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "OBS MOBILE",
-                        color = Color(0xFF64748B),
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        letterSpacing = 1.sp
-                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .background(Color(0x33475569), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "STUDIO MODE",
+                            color = StreamCyan,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp
+                        )
+                    }
                 }
 
                 // Center status message / reconnect notice
@@ -202,114 +220,88 @@ fun MainStreamingScreen(
                 )
             }
 
-            // 2. Center Camera Viewport with telemetry overlay
+            Spacer(modifier = Modifier.height(4.dp))
+
+            // 2. Center Studio Mode: Preview (Left) + Program (Right) Panes
             Box(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .border(1.dp, Color(0xFF1E293B), RoundedCornerShape(8.dp))
-                    .background(Color.Black),
-                contentAlignment = Alignment.Center
             ) {
-                if (hasCameraPermission && cameraManager != null) {
-                    // CameraX PreviewView
-                    AndroidView(
-                        factory = { ctx ->
-                            PreviewView(ctx).apply {
-                                scaleType = PreviewView.ScaleType.FIT_CENTER
-                                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-                                cameraManager.setSurfaceProvider(this.surfaceProvider)
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .testTag("camera_preview_view")
-                    )
-                } else {
-                    // Camera Permission Missing Placeholder
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                        modifier = Modifier.padding(16.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Videocam,
-                            contentDescription = null,
-                            tint = Color(0xFF64748B),
-                            modifier = Modifier.size(48.dp)
+                StudioPanes(
+                    studioState = studioState,
+                    cameraManager = cameraManager,
+                    hasCameraPermission = hasCameraPermission,
+                    onSelectCameraSource = { studioManager.setPreviewCamera() },
+                    onSelectImageSource = {
+                        photoPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Camera & Microphone Access Required",
-                            color = Color.White,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "VJStream needs camera and audio access to broadcast to YouTube Live.",
-                            color = Color(0xFF94A3B8),
-                            fontSize = 12.sp
-                        )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Button(
-                            onClick = onRequestPermissions,
-                            colors = ButtonDefaults.buttonColors(containerColor = StreamRed),
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.testTag("grant_permissions_button")
+                    },
+                    onTriggerFade = { studioManager.startFadeTransition() },
+                    programOverlayContent = {
+                        // Floating Real-Time Microphone Level VU Meter
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(6.dp)
                         ) {
-                            Text("Grant Permissions", fontWeight = FontWeight.Bold)
+                            AudioLevelMeter(
+                                audioState = audioState,
+                                level = audioLevel,
+                                peak = peakLevel,
+                                sampleRate = streamingManager.audioCaptureManager.actualSampleRate,
+                                channelCount = streamingManager.audioCaptureManager.actualChannelCount
+                            )
+                        }
+
+                        // Floating Hardware H.264 Video Encoder Diagnostics Overlay
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(6.dp)
+                        ) {
+                            VideoEncoderOverlay(
+                                encoderState = encoderState,
+                                encoderStats = encoderStats,
+                                isTestActive = isEncoderTesting,
+                                onToggleTest = {
+                                    if (isEncoderTesting) {
+                                        streamingManager.stopEncoderTest()
+                                        isEncoderTesting = false
+                                    } else {
+                                        streamingManager.startEncoderTest(streamConfig)
+                                        isEncoderTesting = true
+                                    }
+                                }
+                            )
+                        }
+
+                        // Telemetry HUD anchored to the bottom of the Program preview
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.BottomCenter)
+                                .padding(horizontal = 6.dp, vertical = 4.dp)
+                        ) {
+                            TelemetryHud(
+                                stats = streamStats,
+                                preset = streamConfig.videoPreset,
+                                audioState = audioState,
+                                audioLevel = audioLevel,
+                                encoderState = encoderState,
+                                audioEncoderState = audioEncoderState
+                            )
                         }
                     }
-                }
-
-                // OBS Viewfinder Corner Overlays (aesthetic framing)
-                ViewfinderCorners()
-
-                // Floating Real-Time Microphone Level VU Meter
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(10.dp)
-                ) {
-                    AudioLevelMeter(
-                        audioState = audioState,
-                        level = audioLevel,
-                        peak = peakLevel,
-                        sampleRate = streamingManager.audioCaptureManager.actualSampleRate,
-                        channelCount = streamingManager.audioCaptureManager.actualChannelCount
-                    )
-                }
-
-                // Floating Hardware H.264 Video Encoder Diagnostics Overlay
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(10.dp)
-                ) {
-                    VideoEncoderOverlay(
-                        encoderState = encoderState,
-                        encoderStats = encoderStats,
-                        isTestActive = isEncoderTesting,
-                        onToggleTest = {
-                            if (isEncoderTesting) {
-                                streamingManager.stopEncoderTest()
-                                isEncoderTesting = false
-                            } else {
-                                streamingManager.startEncoderTest(streamConfig)
-                                isEncoderTesting = true
-                            }
-                        }
-                    )
-                }
+                )
 
                 // Microphone Permission Warning Banner (if denied / not granted)
                 if (!hasAudioPermission) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = 40.dp)
+                            .padding(top = 10.dp)
                             .background(Color(0xE67F1D1D), RoundedCornerShape(8.dp))
                             .border(1.dp, StreamRed, RoundedCornerShape(8.dp))
                             .padding(horizontal = 10.dp, vertical = 6.dp)
@@ -348,26 +340,9 @@ fun MainStreamingScreen(
                         }
                     }
                 }
-
-                // Telemetry HUD anchored to the bottom of the camera preview
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                ) {
-                    TelemetryHud(
-                        stats = streamStats,
-                        preset = streamConfig.videoPreset,
-                        audioState = audioState,
-                        audioLevel = audioLevel,
-                        encoderState = encoderState,
-                        audioEncoderState = audioEncoderState
-                    )
-                }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             // 3. Bottom Control Bar
             ControlBar(
@@ -499,41 +474,3 @@ fun MainStreamingScreen(
     }
 }
 
-@Composable
-private fun ViewfinderCorners() {
-    // Elegant OBS Studio camera target guide
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
-    ) {
-        // Top Left
-        Box(
-            modifier = Modifier
-                .size(14.dp)
-                .align(Alignment.TopStart)
-                .border(width = 2.dp, color = Color(0x66FFFFFF), shape = RoundedCornerShape(topStart = 4.dp))
-        )
-        // Top Right
-        Box(
-            modifier = Modifier
-                .size(14.dp)
-                .align(Alignment.TopEnd)
-                .border(width = 2.dp, color = Color(0x66FFFFFF), shape = RoundedCornerShape(topEnd = 4.dp))
-        )
-        // Bottom Left
-        Box(
-            modifier = Modifier
-                .size(14.dp)
-                .align(Alignment.BottomStart)
-                .border(width = 2.dp, color = Color(0x66FFFFFF), shape = RoundedCornerShape(bottomStart = 4.dp))
-        )
-        // Bottom Right
-        Box(
-            modifier = Modifier
-                .size(14.dp)
-                .align(Alignment.BottomEnd)
-                .border(width = 2.dp, color = Color(0x66FFFFFF), shape = RoundedCornerShape(bottomEnd = 4.dp))
-        )
-    }
-}

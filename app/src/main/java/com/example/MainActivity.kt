@@ -25,6 +25,8 @@ import androidx.core.content.ContextCompat
 import com.example.camera.CameraManager
 import com.example.settings.SettingsRepository
 import com.example.streaming.StreamingManager
+import com.example.studio.StudioCompositor
+import com.example.studio.StudioManager
 import com.example.ui.screens.MainStreamingScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.ObsidianBg
@@ -33,6 +35,8 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var streamingManager: StreamingManager
+    private lateinit var studioManager: StudioManager
+    private lateinit var studioCompositor: StudioCompositor
     private var cameraManager: CameraManager? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -41,6 +45,13 @@ class MainActivity : ComponentActivity() {
 
         settingsRepository = SettingsRepository(this)
         streamingManager = StreamingManager(this)
+        studioManager = StudioManager()
+        studioCompositor = StudioCompositor(
+            studioStateFlow = studioManager.studioStateFlow,
+            frameConsumer = { frameData, width, height ->
+                streamingManager.onCameraFrame(frameData, width, height)
+            }
+        )
 
         val config = settingsRepository.getConfig()
         if (config.keepScreenAwake) {
@@ -57,7 +68,7 @@ class MainActivity : ComponentActivity() {
                     height: Int,
                     rotationDegrees: Int
                 ) {
-                    streamingManager.onCameraFrame(yuvData, width, height)
+                    studioCompositor.onCameraFrame(yuvData, width, height)
                 }
 
                 override fun onFpsUpdated(fps: Double) {
@@ -146,6 +157,7 @@ class MainActivity : ComponentActivity() {
                         cameraManager = cameraManager,
                         streamingManager = streamingManager,
                         settingsRepository = settingsRepository,
+                        studioManager = studioManager,
                         hasCameraPermission = hasCameraPermission,
                         hasAudioPermission = hasAudioPermission,
                         onRequestPermissions = { requestAllPermissions() },
