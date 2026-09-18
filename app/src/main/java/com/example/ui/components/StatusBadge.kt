@@ -56,6 +56,18 @@ fun StatusBadge(
             StreamRed,
             "LIVE"
         )
+        StreamStatus.PUBLISHING -> Quad(
+            Color(0x3310B981),
+            StreamGreen,
+            StreamGreen,
+            "PUBLISHING"
+        )
+        StreamStatus.CONNECTED -> Quad(
+            Color(0x3338BDF8),
+            Color(0xFF38BDF8),
+            Color(0xFF38BDF8),
+            "CONNECTED"
+        )
         StreamStatus.CONNECTING -> Quad(
             Color(0x33EAB308),
             StreamYellow,
@@ -79,6 +91,12 @@ fun StatusBadge(
             StreamRed,
             StreamRed,
             "STOPPING"
+        )
+        StreamStatus.STOPPED -> Quad(
+            Color(0x2264748B),
+            Color(0xFF475569),
+            Color(0xFF94A3B8),
+            "STOPPED"
         )
         StreamStatus.ERROR -> Quad(
             Color(0x33EF4444),

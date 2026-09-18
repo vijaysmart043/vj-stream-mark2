@@ -34,6 +34,12 @@ import java.util.TimerTask
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
+data class StreamErrorInfo(
+    val stage: String,
+    val errorType: String,
+    val message: String
+)
+
 class StreamingManager(
     private val context: Context,
     private val rtmpClientFactory: ((RtmpClient.Listener) -> RtmpClient)? = null
@@ -54,12 +60,16 @@ class StreamingManager(
     private val _errorMessageFlow = MutableStateFlow<String?>(null)
     val errorMessageFlow: StateFlow<String?> = _errorMessageFlow.asStateFlow()
 
+    private val _errorInfoFlow = MutableStateFlow<StreamErrorInfo?>(null)
+    val errorInfoFlow: StateFlow<StreamErrorInfo?> = _errorInfoFlow.asStateFlow()
+
     fun setErrorMessage(message: String?) {
         _errorMessageFlow.value = message
     }
 
     fun clearErrorMessage() {
         _errorMessageFlow.value = null
+        _errorInfoFlow.value = null
     }
 
     // Expose standalone video encoder state and stats
@@ -117,9 +127,6 @@ class StreamingManager(
     private val isStreamingActive = AtomicBoolean(false)
     private val isEncoderTestActive = AtomicBoolean(false)
 
-    // Reconnection handling
-    private var reconnectAttempts = 0
-    private val maxReconnectAttempts = 3
     private val mainHandler = Handler(Looper.getMainLooper())
 
     // Statistics timer
@@ -128,9 +135,9 @@ class StreamingManager(
     private var lastMeasuredFps = 30.0
     private var currentBitrateKbps = 0
     private var totalDroppedFrames = 0L
+    private var currentTotalBytesSent = 0L
 
     init {
-        // Run initial encoder capability discovery
         val discovery = VideoEncoderCapabilities.findBestEncoder(VideoEncoderCapabilities.MIME_AVC)
         if (discovery != null) {
             _statsFlow.value = _statsFlow.value.copy(
@@ -145,11 +152,19 @@ class StreamingManager(
     fun startEncoderTest(config: YouTubeStreamConfig) {
         if (isStreamingActive.get() || isEncoderTestActive.get()) return
 
+        val validation = YouTubeStreamValidator.validate(config)
+        if (!validation.isValid) {
+            _errorMessageFlow.value = validation.errorMessage ?: "Invalid stream configuration"
+            _statusFlow.value = StreamStatus.ERROR
+            return
+        }
+
         currentConfig = config
         isEncoderTestActive.set(true)
-        Log.i(TAG, "Starting standalone Video Encoder test: ${config.videoPreset.name}")
+        _statusFlow.value = StreamStatus.INITIALIZING
 
         initVideoEncoder(config, isStandAloneTest = true)
+        _statsFlow.value = _statsFlow.value.copy(statusMessage = "Testing Video Encoder (Standalone)")
     }
 
     /**
@@ -157,23 +172,29 @@ class StreamingManager(
      */
     fun stopEncoderTest() {
         if (!isEncoderTestActive.getAndSet(false)) return
-        Log.i(TAG, "Stopping standalone Video Encoder test")
+
         videoEncoder?.stop()
         videoEncoder = null
         _encoderStateFlow.value = VideoEncoderState.IDLE
+        _encoderStatsFlow.value = VideoEncoderStats()
+        _statusFlow.value = StreamStatus.OFFLINE
         _statsFlow.value = _statsFlow.value.copy(
-            isEncoderActive = false
+            isEncoderActive = false,
+            statusMessage = "Encoder test stopped"
         )
     }
 
-    fun isEncoderRunning(): Boolean {
-        return (isStreamingActive.get() || isEncoderTestActive.get()) && videoEncoder != null
-    }
-
+    /**
+     * Public entrypoint to start live streaming to YouTube.
+     * ONE START BUTTON PRESS = ONE STREAMING ATTEMPT.
+     */
     fun startStream(config: YouTubeStreamConfig) {
-        if (isStreamingActive.get()) return
+        if (isStreamingActive.get() || _statusFlow.value == StreamStatus.CONNECTING || _statusFlow.value == StreamStatus.LIVE) {
+            Log.w(TAG, "Streaming attempt already active; ignoring duplicate start request.")
+            return
+        }
 
-        // Stop standalone test if running
+        // Stop any standalone encoder test before starting real stream
         if (isEncoderTestActive.get()) {
             stopEncoderTest()
         }
@@ -182,14 +203,15 @@ class StreamingManager(
         if (!validation.isValid) {
             val err = validation.errorMessage ?: "YouTube Server URL and Stream Key are required."
             _errorMessageFlow.value = err
+            _errorInfoFlow.value = StreamErrorInfo("CONFIG_VALIDATION", "VALIDATION_FAILED", err)
             _statusFlow.value = StreamStatus.ERROR
             return
         }
 
         currentConfig = config
-        reconnectAttempts = 0
         _statusFlow.value = StreamStatus.INITIALIZING
         _errorMessageFlow.value = null
+        _errorInfoFlow.value = null
 
         startPipeline(config)
     }
@@ -246,30 +268,6 @@ class StreamingManager(
                         }
                     }
 
-                    override fun onEncodedFrame(nalData: ByteArray, isKeyframe: Boolean, timestampMs: Long) {
-                        if (!isStandAloneTest && isTransmissionEnabled.get()) {
-                            val frame = EncodedVideoFrame(
-                                nalData = nalData,
-                                isKeyframe = isKeyframe,
-                                isConfig = false,
-                                timestampUs = timestampMs * 1000L,
-                                size = nalData.size
-                            )
-                            val packets = videoPacketizer.packetize(frame)
-                            for (packet in packets) {
-                                rtmpClient?.sendFlvVideoPacket(packet)
-                                if (packet.isSequenceHeader) {
-                                    Log.i(TAG, "AVC sequence header sent")
-                                } else {
-                                    val count = videoPacketsSent.incrementAndGet()
-                                    if (packet.isKeyframe || count % 90 == 1L) {
-                                        Log.d(TAG, "Video packet sent (ts=${packet.timestampMs}ms, key=${packet.isKeyframe})")
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     override fun onEncoderStateChanged(state: VideoEncoderState) {
                         mainHandler.post {
                             _encoderStateFlow.value = state
@@ -304,6 +302,7 @@ class StreamingManager(
             val errorMsg = "Video encoder initialization failed: ${e.message}"
             Log.e(TAG, errorMsg, e)
             _errorMessageFlow.value = errorMsg
+            _errorInfoFlow.value = StreamErrorInfo("VIDEO_ENCODER", "INIT_FAILED", errorMsg)
             _encoderStateFlow.value = VideoEncoderState.ERROR
             handleError(errorMsg)
             return null
@@ -315,6 +314,7 @@ class StreamingManager(
             val urlValidation = RtmpUrlValidator.validate(config.serverUrl)
             if (urlValidation is RtmpUrlValidator.ValidationResult.Invalid) {
                 _errorMessageFlow.value = "Invalid RTMP URL: ${urlValidation.reason}"
+                _errorInfoFlow.value = StreamErrorInfo("CONFIG_VALIDATION", "INVALID_URL", urlValidation.reason)
                 _statusFlow.value = StreamStatus.ERROR
                 return
             }
@@ -479,7 +479,6 @@ class StreamingManager(
         }
 
         mainHandler.post {
-            reconnectAttempts = 0
             _statusFlow.value = StreamStatus.LIVE
             streamStartTime = System.currentTimeMillis()
             startStatsTimer()
@@ -491,50 +490,21 @@ class StreamingManager(
     }
 
     override fun onConnectionFailed(reason: String) {
-        mainHandler.post {
-            Log.e(TAG, "RTMP connection failed: $reason")
-            if (isStreamingActive.get()) {
-                attemptReconnect(reason)
-            } else {
-                _statusFlow.value = StreamStatus.ERROR
-                _errorMessageFlow.value = "Connection failed: $reason"
-            }
-        }
+        onConnectionFailed(stage = "RTMP", errorType = "CONNECTION_FAILED", message = reason)
     }
 
-    private fun attemptReconnect(reason: String) {
-        if (reconnectAttempts < maxReconnectAttempts) {
-            reconnectAttempts++
-            _statusFlow.value = StreamStatus.RECONNECTING
+    override fun onConnectionFailed(stage: String, errorType: String, message: String) {
+        mainHandler.post {
+            Log.e(TAG, "Streaming attempt failed at stage=$stage, errorType=$errorType: $message")
+            _statusFlow.value = StreamStatus.ERROR
+            _errorInfoFlow.value = StreamErrorInfo(stage, errorType, message)
+            _errorMessageFlow.value = "[$stage] $message"
             _statsFlow.value = _statsFlow.value.copy(
-                statusMessage = "Connection lost. Reconnecting ($reconnectAttempts/$maxReconnectAttempts)...",
-                networkStatus = NetworkHealth.POOR
+                statusMessage = "Error ($stage): $message",
+                networkStatus = NetworkHealth.OFFLINE
             )
-
-            mainHandler.postDelayed({
-                if (isStreamingActive.get()) {
-                    currentConfig?.let {
-                        try {
-                            rtmpClient?.disconnect()
-                            val client = rtmpClientFactory?.invoke(this) ?: RtmpClient(this)
-                            rtmpClient = client.apply {
-                                connect(
-                                    it.serverUrl,
-                                    it.streamKey,
-                                    it.videoPreset.width,
-                                    it.videoPreset.height,
-                                    it.videoPreset.fps,
-                                    it.videoPreset.bitrateKbps
-                                )
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Reconnect attempt failed: ${e.message}")
-                        }
-                    }
-                }
-            }, 3000)
-        } else {
-            handleError("Stream connection lost after $maxReconnectAttempts attempts.")
+            // Clean up resources immediately without automatic reconnect
+            stopStreamResources()
         }
     }
 
@@ -553,49 +523,35 @@ class StreamingManager(
         }
     }
 
-    /**
-     * Performs a non-streaming RTMP connectivity test to verify endpoint and credentials.
-     */
-    fun testRtmpConnection(
-        serverUrl: String,
-        streamKey: String,
-        callback: (Boolean, String) -> Unit
-    ) {
-        val testListener = object : RtmpClient.Listener {
-            override fun onConnected() {}
-            override fun onConnectionFailed(reason: String) {}
-            override fun onDisconnected() {}
-        }
-        val testClient = rtmpClientFactory?.invoke(testListener) ?: RtmpClient(testListener)
-        testClient.testConnection(serverUrl, streamKey, callback = { success, message ->
-            mainHandler.post {
-                callback(success, message)
-            }
-        })
-    }
-
     override fun onDroppedFrame() {
         totalDroppedFrames++
+        _statsFlow.value = _statsFlow.value.copy(droppedFrames = totalDroppedFrames)
     }
 
-    override fun onStatsUpdated(bitrateKbps: Int, droppedFrames: Long) {
+    override fun onStatsUpdated(
+        bitrateKbps: Int,
+        droppedFrames: Long,
+        totalBytesSent: Long,
+        videoPackets: Long,
+        audioPackets: Long
+    ) {
         currentBitrateKbps = bitrateKbps
         totalDroppedFrames = droppedFrames
+        currentTotalBytesSent = totalBytesSent
     }
 
     private fun startStatsTimer() {
         statsTimer?.cancel()
-        statsTimer = Timer("StreamStatsTimer", true).apply {
+        statsTimer = Timer("vjstream-stats", true).apply {
             scheduleAtFixedRate(object : TimerTask() {
                 override fun run() {
-                    mainHandler.post {
-                        if (isStreamingActive.get() && _statusFlow.value == StreamStatus.LIVE) {
-                            val elapsedSec = (System.currentTimeMillis() - streamStartTime) / 1000
+                    if (isStreamingActive.get() && _statusFlow.value == StreamStatus.LIVE) {
+                        mainHandler.post {
+                            val elapsedSec = (System.currentTimeMillis() - streamStartTime) / 1000L
                             val health = when {
                                 totalDroppedFrames > 50 -> NetworkHealth.POOR
-                                totalDroppedFrames > 10 -> NetworkHealth.FAIR
-                                currentBitrateKbps > 1000 -> NetworkHealth.EXCELLENT
-                                else -> NetworkHealth.GOOD
+                                totalDroppedFrames > 10 -> NetworkHealth.GOOD
+                                else -> NetworkHealth.EXCELLENT
                             }
 
                             _statsFlow.value = _statsFlow.value.copy(
@@ -605,7 +561,11 @@ class StreamingManager(
                                 audioBitrateKbps = (currentConfig?.audioConfig?.bitrateBps ?: 128000) / 1000,
                                 droppedFrames = totalDroppedFrames,
                                 networkStatus = health,
-                                statusMessage = "Streaming to YouTube Live"
+                                videoPacketsSent = videoPacketsSent.get(),
+                                audioPacketsSent = audioPacketsSent.get(),
+                                totalBytesSent = currentTotalBytesSent,
+                                connectionState = _rtmpConnectionStateFlow.value.name,
+                                statusMessage = "Live on YouTube"
                             )
                         }
                     }
@@ -618,15 +578,41 @@ class StreamingManager(
         mainHandler.post {
             _statusFlow.value = StreamStatus.ERROR
             _errorMessageFlow.value = message
-            stopStream()
-            stopEncoderTest()
+            _errorInfoFlow.value = StreamErrorInfo("PIPELINE", "ERROR", message)
+            stopStreamResources()
         }
+    }
+
+    private fun stopStreamResources() {
+        isTransmissionEnabled.set(false)
+        isStreamingActive.set(false)
+        isEncoderTestActive.set(false)
+        statsTimer?.cancel()
+        statsTimer = null
+
+        Thread {
+            try {
+                audioEncoder?.stop()
+                audioEncoder = null
+
+                videoEncoder?.stop()
+                videoEncoder = null
+
+                rtmpClient?.disconnect()
+                rtmpClient = null
+
+                videoPacketizer.reset()
+                audioPacketizer.reset()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping streaming resources: ${e.message}")
+            }
+        }.start()
     }
 
     fun stopStream() {
         isTransmissionEnabled.set(false)
         if (!isStreamingActive.getAndSet(false)) {
-            if (!isEncoderTestActive.get()) {
+            if (!isEncoderTestActive.get() && _statusFlow.value != StreamStatus.ERROR) {
                 _statusFlow.value = StreamStatus.OFFLINE
             }
             return
@@ -657,12 +643,14 @@ class StreamingManager(
                     _rtmpConnectionStateFlow.value = RtmpConnectionState.DISCONNECTED
                     _audioEncoderStateFlow.value = AudioEncoderState.IDLE
                     _statsFlow.value = StreamStatistics(
-                        statusMessage = "Stream ended"
+                        statusMessage = "Stream stopped"
                     )
                 }
             }
         }.start()
     }
+
+    fun isEncoderRunning(): Boolean = videoEncoder != null
 
     fun release() {
         stopStream()
@@ -672,12 +660,14 @@ class StreamingManager(
 
     fun clearError() {
         _errorMessageFlow.value = null
+        _errorInfoFlow.value = null
         if (_statusFlow.value == StreamStatus.ERROR) {
             _statusFlow.value = StreamStatus.OFFLINE
+            _statsFlow.value = _statsFlow.value.copy(statusMessage = "Ready")
         }
     }
 
     companion object {
-        private const val TAG = "StreamingManager"
+        private const val TAG = "VJStream/Streaming"
     }
 }

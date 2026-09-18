@@ -17,6 +17,7 @@ sealed class YouTubeValidationResult {
  * Robust validator for YouTube RTMP/RTMPS server URLs and stream keys.
  */
 object YouTubeStreamValidator {
+    private const val TAG = "VJStream/YouTube"
 
     /**
      * Validates that the server URL is not empty, is a valid URI,

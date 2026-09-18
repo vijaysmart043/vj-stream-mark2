@@ -2,18 +2,21 @@ package com.example.streaming
 
 enum class StreamStatus {
     OFFLINE,
+    STOPPED,
     INITIALIZING,
     CONNECTING,
+    CONNECTED,
+    PUBLISHING,
     LIVE,
     RECONNECTING,
-    ERROR,
-    STOPPING;
+    STOPPING,
+    ERROR;
 
     val isStreaming: Boolean
-        get() = this == LIVE || this == RECONNECTING
+        get() = this == LIVE || this == RECONNECTING || this == PUBLISHING
 
     val isBusy: Boolean
-        get() = this == INITIALIZING || this == CONNECTING || this == STOPPING
+        get() = this == INITIALIZING || this == CONNECTING || this == CONNECTED || this == PUBLISHING || this == STOPPING
 }
 
 enum class NetworkHealth {
@@ -36,7 +39,11 @@ data class StreamStatistics(
     val isEncoderActive: Boolean = false,
     val encoderName: String = "None",
     val encodedFrames: Long = 0L,
-    val keyframes: Long = 0L
+    val keyframes: Long = 0L,
+    val videoPacketsSent: Long = 0L,
+    val audioPacketsSent: Long = 0L,
+    val totalBytesSent: Long = 0L,
+    val connectionState: String = "OFFLINE"
 ) {
     val durationFormatted: String
         get() {
@@ -57,6 +64,17 @@ data class StreamStatistics(
                 String.format("%.1f Mbps", totalKbps / 1000.0)
             } else {
                 "$totalKbps kbps"
+            }
+        }
+
+    val formattedDataSent: String
+        get() {
+            val bytes = totalBytesSent
+            return when {
+                bytes >= 1024 * 1024 * 1024 -> String.format("%.2f GB", bytes / (1024.0 * 1024.0 * 1024.0))
+                bytes >= 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
+                bytes >= 1024 -> String.format("%.0f KB", bytes / 1024.0)
+                else -> "$bytes B"
             }
         }
 }

@@ -149,6 +149,22 @@ fun TelemetryHud(
         )
 
         TelemetryItem(
+            label = "DATA",
+            value = if (stats.totalBytesSent > 0) stats.formattedDataSent else "--",
+            valueColor = Color.White
+        )
+
+        TelemetryItem(
+            label = "PACKETS",
+            value = if (stats.videoPacketsSent > 0 || stats.audioPacketsSent > 0) {
+                "V:${stats.videoPacketsSent} A:${stats.audioPacketsSent}"
+            } else {
+                "--"
+            },
+            valueColor = StreamCyan
+        )
+
+        TelemetryItem(
             label = "DROPPED",
             value = "${stats.droppedFrames}",
             valueColor = if (stats.droppedFrames > 10) StreamYellow else Color.White

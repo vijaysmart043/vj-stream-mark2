@@ -466,4 +466,54 @@ class StreamingPipelineIntegrationTest {
         assertFalse(fakeRtmpClient.isConnected)
         assertEquals(RtmpConnectionState.DISCONNECTED, fakeRtmpClient.currentState)
     }
+
+    // 9. PHASE 6G DIAGNOSTIC AND TERMINAL FAILURE TESTS
+    @Test
+    fun testFirstFailureIsTerminalWithoutAutoReconnect() {
+        var connectionAttemptCount = 0
+        val failingClient = object : RtmpClient {
+            var listener: RtmpClient.Listener? = null
+            override val connectionStateFlow = MutableStateFlow(RtmpConnectionState.DISCONNECTED)
+            override val currentState = RtmpConnectionState.DISCONNECTED
+            override val isConnected = false
+
+            override fun connect(serverUrl: String, streamKey: String, width: Int, height: Int, fps: Int, videoBitrateKbps: Int) {
+                connectionAttemptCount++
+                // Fail immediately
+                listener?.onConnectionFailed("RTMP_HANDSHAKE", "HANDSHAKE_TIMEOUT", "Server did not complete handshake")
+            }
+
+            override fun disconnect() {}
+            override fun testConnection(serverUrl: String, streamKey: String, timeoutMs: Int, callback: (Boolean, String) -> Unit) {}
+            override fun setSpsPps(sps: ByteArray, pps: ByteArray) {}
+            override fun sendVideo(frame: EncodedVideoFrame) {}
+            override fun sendVideo(nalData: ByteArray, isKeyframe: Boolean, timestampMs: Long) {}
+            override fun sendFlvVideoPacket(packet: FlvVideoPacket) {}
+            override fun sendAudio(frame: EncodedAudioFrame) {}
+            override fun sendAudio(aacData: ByteArray, timestampMs: Long) {}
+            override fun sendAudioConfig(config: AudioSpecificConfig) {}
+            override fun sendAudioSequenceHeader(sampleRate: Int, channelCount: Int) {}
+            override fun sendFlvAudioPacket(packet: FlvAudioPacket) {}
+        }
+
+        val manager = StreamingManager(context) { listener ->
+            failingClient.listener = listener
+            failingClient
+        }
+        manager.startStream(createValidConfig())
+        Thread.sleep(50)
+        ShadowLooper.idleMainLooper()
+
+        // Verify that only ONE connection attempt was made
+        assertEquals(1, connectionAttemptCount)
+        assertEquals(StreamStatus.ERROR, manager.statusFlow.value)
+        assertNotNull(manager.errorInfoFlow.value)
+        assertEquals("RTMP_HANDSHAKE", manager.errorInfoFlow.value?.stage)
+        assertEquals("HANDSHAKE_TIMEOUT", manager.errorInfoFlow.value?.errorType)
+
+        // Advance looper to ensure NO automatic reconnection timer was posted
+        ShadowLooper.idleMainLooper()
+        assertEquals(1, connectionAttemptCount)
+        assertEquals(StreamStatus.ERROR, manager.statusFlow.value)
+    }
 }
