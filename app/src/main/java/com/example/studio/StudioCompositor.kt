@@ -31,20 +31,20 @@ class StudioCompositor(
         lastCameraWidth = width
         lastCameraHeight = height
 
-        // Save reference or copy for transitions if needed
-        if (lastCameraFrame == null || lastCameraFrame?.size != yuvData.size) {
-            lastCameraFrame = ByteArray(yuvData.size)
-        }
-        System.arraycopy(yuvData, 0, lastCameraFrame!!, 0, yuvData.size)
-
         val state = studioStateFlow.value
-        val requiredSize = width * height * 3 / 2
-
-        if (blendBuffer == null || blendBuffer?.size != requiredSize) {
-            blendBuffer = ByteArray(requiredSize)
-        }
 
         if (state.isTransitioning) {
+            // Save frame copy only when transition is active
+            if (lastCameraFrame == null || lastCameraFrame?.size != yuvData.size) {
+                lastCameraFrame = ByteArray(yuvData.size)
+            }
+            System.arraycopy(yuvData, 0, lastCameraFrame!!, 0, yuvData.size)
+
+            val requiredSize = width * height * 3 / 2
+            if (blendBuffer == null || blendBuffer?.size != requiredSize) {
+                blendBuffer = ByteArray(requiredSize)
+            }
+
             // Blending transition between outgoing Program and incoming Preview
             val outgoingNv21 = getSourceNv21(state.programSource, yuvData, width, height)
             val incomingNv21 = getSourceNv21(state.previewSource, yuvData, width, height)
@@ -63,7 +63,7 @@ class StudioCompositor(
                 frameConsumer(outgoingNv21 ?: incomingNv21 ?: yuvData, width, height)
             }
         } else {
-            // Not transitioning - route according to active program source
+            // Not transitioning - route immediately with zero copying
             when (val program = state.programSource) {
                 is StudioSource.Camera -> {
                     frameConsumer(yuvData, width, height)

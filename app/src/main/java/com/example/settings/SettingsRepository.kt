@@ -157,7 +157,7 @@ class SettingsRepository(
             audioConfig = AudioConfig(
                 enabled = micEnabled,
                 sampleRate = sampleRate,
-                channelCount = 2,
+                channelCount = 1,
                 bitrateBps = audioBitrate
             ),
             isFrontCamera = isFront,

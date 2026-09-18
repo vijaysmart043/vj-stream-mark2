@@ -48,7 +48,7 @@ object VideoPresets {
 data class AudioConfig(
     val enabled: Boolean = true,
     val sampleRate: Int = 48000,
-    val channelCount: Int = 2, // Stereo default, falls back to mono
+    val channelCount: Int = 1, // Mono: standard 48000 Hz 16-bit PCM for YouTube RTMP
     val bitrateBps: Int = 128000
 )
 

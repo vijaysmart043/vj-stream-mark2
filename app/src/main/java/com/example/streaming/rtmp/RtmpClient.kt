@@ -946,15 +946,44 @@ class DefaultRtmpClient(
 
     private fun enqueuePacket(packet: RtmpPacket) {
         if (!isStreamingFlag.get()) return
-        val added = packetQueue.offer(packet)
-        if (!added) {
-            // Buffer full, drop non-critical packet
-            val dropped = packetQueue.poll()
-            if (dropped != null) {
-                droppedFramesCount.incrementAndGet()
-                listener.onDroppedFrame()
-                Log.w(TAG, "RTMP queue full. Dropped frame (type=${dropped.messageType}, key=${dropped.isKeyframe})")
+
+        // Non-blocking attempt to insert
+        if (packetQueue.offer(packet)) {
+            return
+        }
+
+        // Queue is congested: drop oldest non-keyframe video packet to preserve audio and keyframes
+        synchronized(packetQueue) {
+            val iterator = packetQueue.iterator()
+            var droppedVideo = false
+            while (iterator.hasNext()) {
+                val candidate = iterator.next()
+                // Only drop non-keyframe video packets
+                if (candidate.messageType == RtmpPacket.TYPE_VIDEO && !candidate.isKeyframe) {
+                    iterator.remove()
+                    droppedFramesCount.incrementAndGet()
+                    listener.onDroppedFrame()
+                    droppedVideo = true
+                    Log.w(TAG, "RTMP queue congested: dropped stale non-keyframe video packet (ts=${candidate.timestamp})")
+                    break
+                }
             }
+
+            if (!droppedVideo) {
+                // If all queued packets are audio or keyframes, drop oldest non-audio packet if any
+                val secondPass = packetQueue.iterator()
+                while (secondPass.hasNext()) {
+                    val candidate = secondPass.next()
+                    if (candidate.messageType != RtmpPacket.TYPE_AUDIO) {
+                        secondPass.remove()
+                        droppedFramesCount.incrementAndGet()
+                        listener.onDroppedFrame()
+                        Log.w(TAG, "RTMP queue congested: dropped video packet (key=${candidate.isKeyframe})")
+                        break
+                    }
+                }
+            }
+
             packetQueue.offer(packet)
         }
     }

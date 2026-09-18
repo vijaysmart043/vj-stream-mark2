@@ -46,9 +46,8 @@ class AudioEncoder(
     private var codec: MediaCodec? = null
     private val isRunning = AtomicBoolean(false)
 
-    // Monotonic timestamp timeline
-    private var baseTimeNs = -1L
-    private var lastTimestampUs = -1L
+    // Sample-based timestamp timeline fallback
+    private var totalSamplesEncoded = 0L
 
     // AudioSpecificConfig
     @Volatile
@@ -73,9 +72,8 @@ class AudioEncoder(
             codec = encoder
             isRunning.set(true)
 
-            // Reset monotonic timestamp timeline
-            baseTimeNs = -1L
-            lastTimestampUs = -1L
+            // Reset sample-based timestamp timeline
+            totalSamplesEncoded = 0L
 
             // Generate baseline AudioSpecificConfig
             val initialAsc = AudioSpecificConfig.fromSampleRateAndChannels(sampleRate, channelCount)
@@ -114,7 +112,7 @@ class AudioEncoder(
                     val presentationTimeUs = if (timestampUs >= 0) {
                         timestampUs
                     } else {
-                        getMonotonicTimestampUs()
+                        getSampleTimestampUs(toWrite)
                     }
 
                     encoder.queueInputBuffer(inputIndex, 0, toWrite, presentationTimeUs, 0)
@@ -193,16 +191,16 @@ class AudioEncoder(
         }
     }
 
-    private fun getMonotonicTimestampUs(): Long {
-        val nowNs = System.nanoTime()
-        if (baseTimeNs < 0) {
-            baseTimeNs = nowNs
-            lastTimestampUs = 0L
-            return 0L
+    private fun getSampleTimestampUs(bytesWritten: Int): Long {
+        val bytesPerSample = 2 * channelCount
+        val ts = if (sampleRate > 0) {
+            (totalSamplesEncoded * 1_000_000L) / sampleRate
+        } else {
+            0L
         }
-        val elapsedUs = (nowNs - baseTimeNs) / 1000L
-        val ts = if (elapsedUs <= lastTimestampUs) lastTimestampUs + 1L else elapsedUs
-        lastTimestampUs = ts
+        if (bytesPerSample > 0 && bytesWritten > 0) {
+            totalSamplesEncoded += (bytesWritten / bytesPerSample)
+        }
         return ts
     }
 

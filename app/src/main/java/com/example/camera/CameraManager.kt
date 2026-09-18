@@ -47,8 +47,12 @@ class CameraManager(
     private var frameCount = AtomicInteger(0)
     private var lastFpsCalcTime = System.currentTimeMillis()
 
-    // Reusable byte array buffer to prevent GC pauses
-    private var nv21Buffer: ByteArray? = null
+    // Ring buffer of byte arrays to prevent GC pauses and race conditions
+    private val bufferRingSize = 3
+    private var bufferRing: Array<ByteArray>? = null
+    private var bufferIndex = 0
+    private var uRowTemp = ByteArray(2048)
+    private var vRowTemp = ByteArray(2048)
 
     fun setTargetResolution(width: Int, height: Int) {
         targetWidth = width
@@ -160,13 +164,17 @@ class CameraManager(
             val rotation = image.imageInfo.rotationDegrees
 
             val requiredSize = width * height * 3 / 2
-            var buffer = nv21Buffer
-            if (buffer == null || buffer.size != requiredSize) {
-                buffer = ByteArray(requiredSize)
-                nv21Buffer = buffer
+            var ring = bufferRing
+            if (ring == null || ring[0].size != requiredSize) {
+                ring = Array(bufferRingSize) { ByteArray(requiredSize) }
+                bufferRing = ring
+                bufferIndex = 0
             }
 
-            yuv420ToNv21(image, buffer)
+            val buffer = ring[bufferIndex]
+            bufferIndex = (bufferIndex + 1) % bufferRingSize
+
+            yuv420ToNv12(image, buffer)
             listener.onFrameAvailable(buffer, width, height, rotation)
 
             // FPS tracking
@@ -187,9 +195,10 @@ class CameraManager(
     }
 
     /**
-     * Converts YUV_420_888 ImageProxy planes into NV21 byte array.
+     * Converts YUV_420_888 ImageProxy planes into NV12 byte array (Y followed by interleaved U, V)
+     * using bulk memory operations for maximum real-time performance.
      */
-    private fun yuv420ToNv21(image: ImageProxy, outNv21: ByteArray) {
+    private fun yuv420ToNv12(image: ImageProxy, outNv12: ByteArray) {
         val width = image.width
         val height = image.height
 
@@ -204,35 +213,66 @@ class CameraManager(
         val yRowStride = yPlane.rowStride
         val yPixelStride = yPlane.pixelStride
 
-        var pos = 0
-
-        // Copy Y plane
+        // 1. Copy Y plane using bulk block reads
         if (yPixelStride == 1 && yRowStride == width) {
-            yBuffer.get(outNv21, 0, width * height)
-            pos = width * height
+            yBuffer.position(0)
+            yBuffer.get(outNv12, 0, width * height)
         } else {
             for (row in 0 until height) {
-                val rowStart = row * yRowStride
-                for (col in 0 until width) {
-                    outNv21[pos++] = yBuffer.get(rowStart + col * yPixelStride)
-                }
+                yBuffer.position(row * yRowStride)
+                yBuffer.get(outNv12, row * width, width)
             }
         }
 
-        val uvRowStride = vPlane.rowStride
-        val uvPixelStride = vPlane.pixelStride
+        // 2. Copy and interleave Chroma planes as NV12 (U then V)
+        val uRowStride = uPlane.rowStride
+        val vRowStride = vPlane.rowStride
+        val uPixelStride = uPlane.pixelStride
+        val vPixelStride = vPlane.pixelStride
 
-        // Copy UV planes as interleaved NV21 (V then U)
         val chromaHeight = height / 2
         val chromaWidth = width / 2
+        val ySize = width * height
 
-        for (row in 0 until chromaHeight) {
-            for (col in 0 until chromaWidth) {
-                val vOffset = row * uvRowStride + col * uvPixelStride
-                val uOffset = row * uPlane.rowStride + col * uPlane.pixelStride
+        if (uPixelStride == 2 && vPixelStride == 2) {
+            val uRowLen = Math.min(uRowTemp.size, (chromaWidth - 1) * uPixelStride + 1)
+            val vRowLen = Math.min(vRowTemp.size, (chromaWidth - 1) * vPixelStride + 1)
 
-                outNv21[pos++] = vBuffer.get(vOffset)
-                outNv21[pos++] = uBuffer.get(uOffset)
+            var dst = ySize
+            for (row in 0 until chromaHeight) {
+                uBuffer.position(row * uRowStride)
+                val uRead = Math.min(uRowLen, uBuffer.remaining())
+                uBuffer.get(uRowTemp, 0, uRead)
+
+                vBuffer.position(row * vRowStride)
+                val vRead = Math.min(vRowLen, vBuffer.remaining())
+                vBuffer.get(vRowTemp, 0, vRead)
+
+                var uIdx = 0
+                var vIdx = 0
+                for (col in 0 until chromaWidth) {
+                    outNv12[dst++] = uRowTemp[uIdx]
+                    outNv12[dst++] = vRowTemp[vIdx]
+                    uIdx += uPixelStride
+                    vIdx += vPixelStride
+                }
+            }
+        } else {
+            // Planar I420 (pixelStride == 1)
+            var dst = ySize
+            for (row in 0 until chromaHeight) {
+                uBuffer.position(row * uRowStride)
+                val uRead = Math.min(chromaWidth, uBuffer.remaining())
+                uBuffer.get(uRowTemp, 0, uRead)
+
+                vBuffer.position(row * vRowStride)
+                val vRead = Math.min(chromaWidth, vBuffer.remaining())
+                vBuffer.get(vRowTemp, 0, vRead)
+
+                for (col in 0 until chromaWidth) {
+                    outNv12[dst++] = uRowTemp[col]
+                    outNv12[dst++] = vRowTemp[col]
+                }
             }
         }
     }

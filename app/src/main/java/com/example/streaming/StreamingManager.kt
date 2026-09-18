@@ -90,9 +90,12 @@ class StreamingManager(
         preferredChannels = 1,
         listener = object : AudioCaptureManager.Listener {
             override fun onAudioFrame(frame: AudioFrame) {
+                val samples = (frame.length / (2 * frame.channelCount)).toLong()
+                totalAudioSamplesCaptured.addAndGet(samples)
+                totalAudioBytesCaptured.addAndGet(frame.length.toLong())
+                lastAudioTimestampUs.set(frame.timestampUs)
                 if (isStreamingActive.get()) {
-                    // Pass -1L to generate monotonic timestamp relative to stream start
-                    audioEncoder?.encodePcm(frame.data, frame.length, -1L)
+                    audioEncoder?.encodePcm(frame.data, frame.length, frame.timestampUs)
                 }
             }
 
@@ -120,6 +123,9 @@ class StreamingManager(
     val videoBytesSent = AtomicLong(0)
     val audioBytesSent = AtomicLong(0)
     val rtmpBytesSent = AtomicLong(0)
+    private val totalAudioSamplesCaptured = AtomicLong(0)
+    private val totalAudioBytesCaptured = AtomicLong(0)
+    private val lastAudioTimestampUs = AtomicLong(0)
 
     private var currentConfig: YouTubeStreamConfig? = null
     private val isStreamingActive = AtomicBoolean(false)
@@ -130,13 +136,24 @@ class StreamingManager(
     private val maxReconnectAttempts = 3
     private val mainHandler = Handler(Looper.getMainLooper())
 
-    // Statistics timer
+    // Statistics timer & rate calculation state
     private var statsTimer: Timer? = null
     private var streamStartTime = 0L
-    private var lastMeasuredFps = 30.0
+    private var lastMeasuredCameraFps = 0.0
     private var currentBitrateKbps = 0
     private var totalDroppedFrames = 0L
     private var currentTotalBytesSent = 0L
+
+    // Windowed delta tracking for real FPS and Bitrates
+    private var lastCalcTimeMs = 0L
+    private var lastVideoPacketsSnapshot = 0L
+    private var lastVideoBytesSnapshot = 0L
+    private var lastAudioBytesSnapshot = 0L
+    private var lastTotalBytesSnapshot = 0L
+    private var calculatedTransmittedFps = 0.0
+    private var calculatedActualVideoBitrateKbps = 0
+    private var calculatedActualAudioBitrateKbps = 0
+    private var calculatedSendRateKbps = 0
 
     init {
         // Run initial encoder capability discovery
@@ -281,7 +298,7 @@ class StreamingManager(
                                 encoderName = stats.encoderName,
                                 encodedFrames = stats.encodedFrameCount,
                                 keyframes = stats.keyframeCount,
-                                fps = if (stats.currentFps > 0.0) stats.currentFps else lastMeasuredFps,
+                                fps = if (stats.currentFps > 0.0) stats.currentFps else lastMeasuredCameraFps,
                                 videoBitrateKbps = if (stats.currentBitrateKbps > 0) stats.currentBitrateKbps else _statsFlow.value.videoBitrateKbps
                             )
                         }
@@ -324,6 +341,9 @@ class StreamingManager(
             videoBytesSent.set(0)
             audioBytesSent.set(0)
             rtmpBytesSent.set(0)
+            totalAudioSamplesCaptured.set(0)
+            totalAudioBytesCaptured.set(0)
+            lastAudioTimestampUs.set(0)
             currentTotalBytesSent = 0L
 
             _statusFlow.value = StreamStatus.CONNECTING
@@ -432,7 +452,7 @@ class StreamingManager(
     }
 
     fun updateCameraFps(fps: Double) {
-        lastMeasuredFps = fps
+        lastMeasuredCameraFps = fps
     }
 
     fun startAudioCapture() {
@@ -587,37 +607,123 @@ class StreamingManager(
 
     private fun startStatsTimer() {
         statsTimer?.cancel()
+        lastCalcTimeMs = System.currentTimeMillis()
+        lastVideoPacketsSnapshot = videoPacketsSent.get()
+        lastVideoBytesSnapshot = videoBytesSent.get()
+        lastAudioBytesSnapshot = audioBytesSent.get()
+        lastTotalBytesSnapshot = currentTotalBytesSent
+
         statsTimer = Timer("StreamStatsTimer", true).apply {
             scheduleAtFixedRate(object : TimerTask() {
                 override fun run() {
                     mainHandler.post {
                         if (isStreamingActive.get() && _statusFlow.value == StreamStatus.LIVE) {
-                            val elapsedSec = (System.currentTimeMillis() - streamStartTime) / 1000
+                            val now = System.currentTimeMillis()
+                            val elapsedSec = (now - streamStartTime) / 1000
+                            val windowElapsedMs = now - lastCalcTimeMs
+
+                            val currentVideoPackets = videoPacketsSent.get()
+                            val currentVideoBytes = videoBytesSent.get()
+                            val currentAudioBytes = audioBytesSent.get()
+                            val currentTotalBytes = if (rtmpBytesSent.get() > 0) rtmpBytesSent.get() else currentTotalBytesSent
+
+                            if (windowElapsedMs >= 500) {
+                                val vPacketsDelta = currentVideoPackets - lastVideoPacketsSnapshot
+                                val vBytesDelta = currentVideoBytes - lastVideoBytesSnapshot
+                                val aBytesDelta = currentAudioBytes - lastAudioBytesSnapshot
+                                val tBytesDelta = currentTotalBytes - lastTotalBytesSnapshot
+
+                                calculatedTransmittedFps = (vPacketsDelta * 1000.0) / windowElapsedMs
+                                calculatedActualVideoBitrateKbps = ((vBytesDelta * 8 * 1000) / (windowElapsedMs * 1000)).toInt()
+                                calculatedActualAudioBitrateKbps = ((aBytesDelta * 8 * 1000) / (windowElapsedMs * 1000)).toInt()
+                                calculatedSendRateKbps = ((tBytesDelta * 8 * 1000) / (windowElapsedMs * 1000)).toInt()
+
+                                lastCalcTimeMs = now
+                                lastVideoPacketsSnapshot = currentVideoPackets
+                                lastVideoBytesSnapshot = currentVideoBytes
+                                lastAudioBytesSnapshot = currentAudioBytes
+                                lastTotalBytesSnapshot = currentTotalBytes
+                            }
+
+                            val encFps = _encoderStatsFlow.value.currentFps
+                            val encBitrateKbps = _encoderStatsFlow.value.currentBitrateKbps
+                            val effectiveVideoBitrate = if (calculatedActualVideoBitrateKbps > 0) calculatedActualVideoBitrateKbps else encBitrateKbps
+                            val effectiveAudioBitrate = if (calculatedActualAudioBitrateKbps > 0) calculatedActualAudioBitrateKbps else ((currentConfig?.audioConfig?.bitrateBps ?: 128000) / 1000)
+
                             val health = when {
                                 totalDroppedFrames > 50 -> NetworkHealth.POOR
                                 totalDroppedFrames > 10 -> NetworkHealth.FAIR
-                                currentBitrateKbps > 1000 -> NetworkHealth.EXCELLENT
+                                calculatedSendRateKbps > 1000 || currentBitrateKbps > 1000 -> NetworkHealth.EXCELLENT
                                 else -> NetworkHealth.GOOD
                             }
 
-                            _statsFlow.value = _statsFlow.value.copy(
+                            val isConnected = _rtmpConnectionStateFlow.value.isConnected
+
+                            val stats = _statsFlow.value.copy(
                                 durationSeconds = elapsedSec,
-                                fps = if (_encoderStatsFlow.value.currentFps > 0.0) _encoderStatsFlow.value.currentFps else lastMeasuredFps,
-                                videoBitrateKbps = if (_encoderStatsFlow.value.currentBitrateKbps > 0) _encoderStatsFlow.value.currentBitrateKbps else currentBitrateKbps,
-                                audioBitrateKbps = (currentConfig?.audioConfig?.bitrateBps ?: 128000) / 1000,
+                                // VIDEO real metrics
+                                cameraFps = lastMeasuredCameraFps,
+                                encoderFps = encFps,
+                                transmittedFps = calculatedTransmittedFps,
+                                fps = if (encFps > 0.0) encFps else if (lastMeasuredCameraFps > 0.0) lastMeasuredCameraFps else 0.0,
+                                encodedVideoBytes = currentVideoBytes,
+                                actualVideoBitrateKbps = effectiveVideoBitrate,
+                                videoBitrateKbps = effectiveVideoBitrate,
+                                droppedVideoFrames = totalDroppedFrames,
                                 droppedFrames = totalDroppedFrames,
+                                keyframeCount = _encoderStatsFlow.value.keyframeCount,
+
+                                // AUDIO real metrics
+                                audioSamples = totalAudioSamplesCaptured.get(),
+                                audioFrames = audioFramesEncoded.get(),
+                                audioBytes = totalAudioBytesCaptured.get(),
+                                actualAudioBitrateKbps = effectiveAudioBitrate,
+                                audioBitrateKbps = effectiveAudioBitrate,
+                                audioSampleRate = audioCaptureManager.actualSampleRate,
+                                audioChannels = audioCaptureManager.actualChannelCount,
+                                audioTimestampUs = lastAudioTimestampUs.get(),
+
+                                // NETWORK real metrics
+                                bytesSent = currentTotalBytes,
+                                totalBytesSent = currentTotalBytes,
+                                sendRateKbps = if (calculatedSendRateKbps > 0) calculatedSendRateKbps else currentBitrateKbps,
+                                rtmpConnected = isConnected,
+                                rtmpReconnectCount = reconnectAttempts,
                                 networkStatus = health,
-                                videoPacketsSent = videoPacketsSent.get(),
+
+                                // Counters
+                                videoPacketsSent = currentVideoPackets,
                                 audioPacketsSent = audioPacketsSent.get(),
-                                totalBytesSent = currentTotalBytesSent,
                                 connectionState = _rtmpConnectionStateFlow.value.name,
                                 videoFramesEncoded = videoFramesEncoded.get(),
                                 audioFramesEncoded = audioFramesEncoded.get(),
-                                videoBytesSent = videoBytesSent.get(),
-                                audioBytesSent = audioBytesSent.get(),
-                                rtmpBytesSent = if (rtmpBytesSent.get() > 0) rtmpBytesSent.get() else currentTotalBytesSent,
+                                videoBytesSent = currentVideoBytes,
+                                audioBytesSent = currentAudioBytes,
+                                rtmpBytesSent = currentTotalBytes,
                                 statusMessage = "Live on YouTube"
                             )
+                            _statsFlow.value = stats
+
+                            // Periodic Structured Debug Telemetry Log
+                            val videoMbps = String.format("%.2f Mbps", effectiveVideoBitrate / 1000.0)
+                            val txMbps = String.format("%.2f Mbps", (stats.sendRateKbps) / 1000.0)
+                            Log.i(TAG, """
+                                STREAM DEBUG
+                                Camera FPS: ${String.format("%.1f", stats.cameraFps)}
+                                Encoder FPS: ${String.format("%.1f", stats.encoderFps)}
+                                TX FPS: ${String.format("%.1f", stats.transmittedFps)}
+                                Video bitrate: $videoMbps
+                                Dropped frames: ${stats.droppedVideoFrames}
+
+                                Audio:
+                                ${stats.audioSampleRate / 1000}kHz
+                                ${if (stats.audioChannels == 1) "Mono" else "Stereo"}
+                                ${stats.actualAudioBitrateKbps}kbps
+
+                                Network:
+                                RTMPS ${if (stats.rtmpConnected) "connected" else "disconnected"}
+                                TX: $txMbps (reconnects: ${stats.rtmpReconnectCount})
+                            """.trimIndent())
                         }
                     }
                 }

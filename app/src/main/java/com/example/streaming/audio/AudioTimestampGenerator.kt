@@ -11,39 +11,41 @@ class AudioTimestampGenerator(
     private val sampleRate: Int = 48000,
     private val channelCount: Int = 1
 ) {
-    private var baseTimestampUs: Long = -1L
-    private var totalFramesProcessed: Long = 0L
+    private var totalSamplesProcessed: Long = 0L
 
     fun reset() {
-        baseTimestampUs = -1L
-        totalFramesProcessed = 0L
+        totalSamplesProcessed = 0L
     }
 
     /**
-     * Obtains the monotonic timestamp in microseconds for the current audio chunk.
+     * Obtains the monotonic timestamp in microseconds based on actual captured PCM samples.
+     * Formula: (totalSamplesProcessed * 1_000_000L) / sampleRate
      * @param bytesRead size in bytes of the 16-bit PCM chunk read
      */
     fun nextTimestampUs(bytesRead: Int): Long {
-        val currentUs = SystemClock.elapsedRealtimeNanos() / 1000L
-        if (baseTimestampUs < 0L) {
-            baseTimestampUs = currentUs
+        val bytesPerSample = 2 * channelCount // 16-bit PCM = 2 bytes per multi-channel sample frame
+        val currentTimestampUs = if (sampleRate > 0) {
+            (totalSamplesProcessed * 1_000_000L) / sampleRate
+        } else {
+            0L
         }
 
-        val relativeUs = currentUs - baseTimestampUs
-
-        val bytesPerFrame = 2 * channelCount // 16-bit PCM = 2 bytes per sample
-        if (bytesPerFrame > 0) {
-            val frames = bytesRead / bytesPerFrame
-            totalFramesProcessed += frames
+        if (bytesPerSample > 0 && bytesRead > 0) {
+            val samplesInChunk = bytesRead / bytesPerSample
+            totalSamplesProcessed += samplesInChunk
         }
 
-        return relativeUs
+        return currentTimestampUs
     }
 
     /**
      * Absolute monotonic timestamp in microseconds.
      */
     fun currentMonotonicTimeUs(): Long {
-        return SystemClock.elapsedRealtimeNanos() / 1000L
+        return if (sampleRate > 0) {
+            (totalSamplesProcessed * 1_000_000L) / sampleRate
+        } else {
+            0L
+        }
     }
 }

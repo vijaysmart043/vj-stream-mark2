@@ -63,7 +63,7 @@ class AudioCaptureManager(
     var actualChannelCount: Int = preferredChannels
         private set
 
-    private val timestampGenerator = AudioTimestampGenerator(preferredSampleRate, preferredChannels)
+    private var timestampGenerator = AudioTimestampGenerator(preferredSampleRate, preferredChannels)
 
     // Throttling for UI level updates: 70ms = ~14 updates per second
     private var lastLevelUpdateTimeMs: Long = 0L
@@ -116,6 +116,7 @@ class AudioCaptureManager(
             audioRecord = record
             actualSampleRate = sampleRate
             actualChannelCount = channelCount
+            timestampGenerator = AudioTimestampGenerator(sampleRate, channelCount)
 
             record.startRecording()
             if (record.recordingState != AudioRecord.RECORDSTATE_RECORDING) {

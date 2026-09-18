@@ -200,9 +200,10 @@ class VideoEncoder(
             if (!isRunning.get()) return@post
 
             try {
-                val inputIndex = encoder.dequeueInputBuffer(10_000L) // 10ms timeout
-                if (inputIndex >= 0) {
-                    val inputBuffer = encoder.getInputBuffer(inputIndex)
+                val inputIndex = encoder.dequeueInputBuffer(0L)
+                val finalIndex = if (inputIndex >= 0) inputIndex else encoder.dequeueInputBuffer(4_000L)
+                if (finalIndex >= 0) {
+                    val inputBuffer = encoder.getInputBuffer(finalIndex)
                     if (inputBuffer != null) {
                         inputBuffer.clear()
                         val toWrite = Math.min(yuvData.size, inputBuffer.remaining())
@@ -211,7 +212,7 @@ class VideoEncoder(
                         val ptsUs = timestampGenerator.nextTimestampUs()
 
                         encoder.queueInputBuffer(
-                            inputIndex,
+                            finalIndex,
                             0,
                             toWrite,
                             ptsUs,

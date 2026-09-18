@@ -24,7 +24,7 @@ class AudioRecordManager(
 
     var actualSampleRate: Int = preferredSampleRate
         private set
-    var actualChannelCount: Int = 2
+    var actualChannelCount: Int = 1
         private set
 
     @SuppressLint("MissingPermission")
@@ -75,7 +75,7 @@ class AudioRecordManager(
     @SuppressLint("MissingPermission")
     private fun initializeAudioRecord(): Triple<AudioRecord, Int, Int> {
         val sampleRates = intArrayOf(preferredSampleRate, 44100, 16000)
-        val channelConfigs = intArrayOf(AudioFormat.CHANNEL_IN_STEREO, AudioFormat.CHANNEL_IN_MONO)
+        val channelConfigs = intArrayOf(AudioFormat.CHANNEL_IN_MONO, AudioFormat.CHANNEL_IN_STEREO)
 
         for (rate in sampleRates) {
             for (chConfig in channelConfigs) {
