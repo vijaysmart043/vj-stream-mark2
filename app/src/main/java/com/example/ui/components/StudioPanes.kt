@@ -436,6 +436,7 @@ fun StudioPanes(
                 contentAlignment = Alignment.Center
             ) {
                 // Program Outgoing Source View
+                val outgoingAlpha = if (studioState.isTransitioning) (1f - studioState.transitionProgress) else 1f
                 when (val program = studioState.programSource) {
                     is StudioSource.Camera -> {
                         if (hasCameraPermission && cameraManager != null) {
@@ -449,6 +450,7 @@ fun StudioPanes(
                                 },
                                 modifier = Modifier
                                     .fillMaxSize()
+                                    .alpha(outgoingAlpha)
                                     .testTag("camera_preview_view")
                             )
                         } else {
@@ -467,6 +469,7 @@ fun StudioPanes(
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier
                                     .fillMaxSize()
+                                    .alpha(outgoingAlpha)
                                     .testTag("program_image_view")
                             )
                         }

@@ -22,8 +22,10 @@ sealed class StudioSource {
         val uri: Uri? = null,
         val bitmap: Bitmap? = null,
         override val name: String = "Image",
+        val nv12Cache: ByteArray? = null,
         val nv21Cache: ByteArray? = null
     ) : StudioSource() {
+        val activeFrameCache: ByteArray? get() = nv12Cache ?: nv21Cache
         override val type: StudioSourceType = StudioSourceType.IMAGE
         override fun toString(): String = "StudioSource.Image(name=$name, uri=$uri)"
     }

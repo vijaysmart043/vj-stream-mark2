@@ -589,6 +589,7 @@ class StreamingManager(
 
     override fun onDroppedFrame() {
         totalDroppedFrames++
+        videoEncoder?.requestKeyframe()
     }
 
     override fun onStatsUpdated(

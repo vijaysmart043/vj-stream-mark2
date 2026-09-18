@@ -20,40 +20,51 @@ object H264NalParser {
     const val NAL_TYPE_AUD = 9
 
     /**
-     * Splits an Annex-B formatted buffer into distinct NAL units (excluding the 3-byte or 4-byte start codes).
+     * Splits an Annex-B formatted buffer into distinct NAL units (excluding start codes).
+     * Robustly handles:
+     * - 3-byte start codes (0x000001)
+     * - 4-byte start codes (0x00000001)
+     * - Arbitrary leading zeros before start codes (leading_zero_8bits)
+     * - Multiple NAL units concatenated in an Access Unit
+     * - Raw NAL units without start codes
      */
     fun splitAnnexB(data: ByteArray, length: Int = data.size): List<ByteArray> {
+        if (length <= 0) return emptyList()
         val nals = ArrayList<ByteArray>(4)
-        var start = -1
+
         var i = 0
+        var currentNalPayloadStart = -1
 
         while (i <= length - 3) {
-            val isStartCode3 = data[i] == 0.toByte() && data[i + 1] == 0.toByte() && data[i + 2] == 1.toByte()
-            val isStartCode4 = i <= length - 4 && isStartCode3 && i > 0 && data[i - 1] == 0.toByte()
-
-            if (isStartCode3) {
-                val actualStartCodeLen = if (i > 0 && data[i - 1] == 0.toByte()) 4 else 3
-                val startCodeIndex = if (actualStartCodeLen == 4) i - 1 else i
-
-                if (start != -1) {
-                    val nalLen = startCodeIndex - start
+            if (data[i] == 0.toByte() && data[i + 1] == 0.toByte() && data[i + 2] == 1.toByte()) {
+                // Found 0x00 0x00 0x01 at index i
+                if (currentNalPayloadStart != -1) {
+                    // Check if current start code has a 4-byte prefix (0x00 0x00 0x00 0x01)
+                    val startCodeIndex = if (i > currentNalPayloadStart && data[i - 1] == 0.toByte()) {
+                        i - 1
+                    } else {
+                        i
+                    }
+                    val nalLen = startCodeIndex - currentNalPayloadStart
                     if (nalLen > 0) {
                         val nal = ByteArray(nalLen)
-                        System.arraycopy(data, start, nal, 0, nalLen)
+                        System.arraycopy(data, currentNalPayloadStart, nal, 0, nalLen)
                         nals.add(nal)
                     }
                 }
-                start = i + 3
-                i += 2
+
+                currentNalPayloadStart = i + 3
+                i += 3
+            } else {
+                i++
             }
-            i++
         }
 
-        if (start != -1 && start < length) {
-            val nalLen = length - start
+        if (currentNalPayloadStart != -1 && currentNalPayloadStart < length) {
+            val nalLen = length - currentNalPayloadStart
             if (nalLen > 0) {
                 val nal = ByteArray(nalLen)
-                System.arraycopy(data, start, nal, 0, nalLen)
+                System.arraycopy(data, currentNalPayloadStart, nal, 0, nalLen)
                 nals.add(nal)
             }
         } else if (nals.isEmpty() && length > 0) {
@@ -68,17 +79,20 @@ object H264NalParser {
     }
 
     /**
-     * Strips leading 3-byte (0x000001) or 4-byte (0x00000001) start code from raw NAL bytes.
+     * Strips leading 3-byte (0x000001), 4-byte (0x00000001), or multi-zero start codes from raw NAL bytes.
      */
     fun stripStartCode(bytes: ByteArray, length: Int = bytes.size): ByteArray {
-        if (length >= 4 && bytes[0] == 0.toByte() && bytes[1] == 0.toByte() && bytes[2] == 0.toByte() && bytes[3] == 1.toByte()) {
-            val res = ByteArray(length - 4)
-            System.arraycopy(bytes, 4, res, 0, res.size)
-            return res
+        if (length <= 0) return ByteArray(0)
+        var offset = 0
+        while (offset < length && bytes[offset] == 0.toByte()) {
+            offset++
         }
-        if (length >= 3 && bytes[0] == 0.toByte() && bytes[1] == 0.toByte() && bytes[2] == 1.toByte()) {
-            val res = ByteArray(length - 3)
-            System.arraycopy(bytes, 3, res, 0, res.size)
+        if (offset < length && bytes[offset] == 1.toByte() && offset >= 2) {
+            val nalStart = offset + 1
+            val nalLen = length - nalStart
+            if (nalLen <= 0) return ByteArray(0)
+            val res = ByteArray(nalLen)
+            System.arraycopy(bytes, nalStart, res, 0, nalLen)
             return res
         }
         if (length == bytes.size) return bytes

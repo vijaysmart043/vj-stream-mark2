@@ -53,15 +53,16 @@ class StudioModeTest {
             uri = testUri,
             bitmap = testBitmap,
             name = "overlay_banner.png",
-            nv21Cache = ByteArray(128 * 72 * 3 / 2)
+            nv12Cache = ByteArray(128 * 72 * 3 / 2)
         )
 
         assertEquals("overlay_banner.png", imageSource.name)
         assertEquals(StudioSourceType.IMAGE, imageSource.type)
         assertEquals(testUri, imageSource.uri)
         assertNotNull(imageSource.bitmap)
-        assertNotNull(imageSource.nv21Cache)
-        assertEquals(128 * 72 * 3 / 2, imageSource.nv21Cache!!.size)
+        assertNotNull(imageSource.nv12Cache)
+        assertEquals(128 * 72 * 3 / 2, imageSource.nv12Cache!!.size)
+        assertEquals(128 * 72 * 3 / 2, imageSource.activeFrameCache!!.size)
     }
 
     // 4. PREVIEW SOURCE SELECTION TEST
@@ -213,27 +214,46 @@ class StudioModeTest {
         assertArrayEquals(imageNv21, framesReceived[0])
     }
 
-    // 10. IMAGE HELPER BITMAP TO NV21 AND BLEND TESTS
+    // 10. IMAGE HELPER BITMAP TO NV21/NV12 AND BLEND TESTS
     @Test
     fun testBitmapToNv21AndBlend() {
         val bitmap = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
-        val nv21 = ImageSourceHelper.bitmapToNv21(bitmap, 16, 16)
-        assertEquals(16 * 16 * 3 / 2, nv21.size)
+        val nv12 = ImageSourceHelper.bitmapToNv12(bitmap, 16, 16)
+        assertEquals(16 * 16 * 3 / 2, nv12.size)
 
         // Test alpha blend: 50% between sourceA (all 0) and sourceB (all 100)
         val srcA = ByteArray(16 * 16 * 3 / 2) { 0 }
         val srcB = ByteArray(16 * 16 * 3 / 2) { 100 }
         val out = ByteArray(16 * 16 * 3 / 2)
 
-        ImageSourceHelper.blendNv21(srcA, srcB, 0.5f, out, 16, 16)
+        ImageSourceHelper.blendNv12(srcA, srcB, 0.5f, out, 16, 16)
         assertEquals(50.toByte(), out[0])
 
         // 100% blend -> should match srcB
-        ImageSourceHelper.blendNv21(srcA, srcB, 1.0f, out, 16, 16)
+        ImageSourceHelper.blendNv12(srcA, srcB, 1.0f, out, 16, 16)
         assertEquals(100.toByte(), out[0])
 
         // 0% blend -> should match srcA
-        ImageSourceHelper.blendNv21(srcA, srcB, 0.0f, out, 16, 16)
+        ImageSourceHelper.blendNv12(srcA, srcB, 0.0f, out, 16, 16)
         assertEquals(0.toByte(), out[0])
+    }
+
+    @Test
+    fun testBitmapToNv12ChromaOrdering() {
+        // Create 2x2 pure Blue bitmap: R=0, G=0, B=255
+        // Y = 41, U (Cb) = 240, V (Cr) = 110
+        val blueBitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        val pixels = IntArray(4) { android.graphics.Color.BLUE }
+        blueBitmap.setPixels(pixels, 0, 2, 0, 0, 2, 2)
+
+        val nv12 = ImageSourceHelper.bitmapToNv12(blueBitmap, 2, 2)
+        assertEquals(6, nv12.size) // 4 Y bytes + 2 UV bytes
+
+        val u = nv12[4].toInt() and 0xFF
+        val v = nv12[5].toInt() and 0xFF
+
+        // Blue has high Cb (U ~ 240) and low Cr (V ~ 110)
+        assertTrue("U (Cb) should be > 200 for pure blue, got $u", u > 200)
+        assertTrue("V (Cr) should be < 130 for pure blue, got $v", v < 130)
     }
 }

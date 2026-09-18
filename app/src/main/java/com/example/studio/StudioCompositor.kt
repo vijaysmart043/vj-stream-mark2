@@ -46,13 +46,13 @@ class StudioCompositor(
             }
 
             // Blending transition between outgoing Program and incoming Preview
-            val outgoingNv21 = getSourceNv21(state.programSource, yuvData, width, height)
-            val incomingNv21 = getSourceNv21(state.previewSource, yuvData, width, height)
+            val outgoingNv12 = getSourceNv12(state.programSource, yuvData, width, height)
+            val incomingNv12 = getSourceNv12(state.previewSource, yuvData, width, height)
 
-            if (outgoingNv21 != null && incomingNv21 != null) {
-                ImageSourceHelper.blendNv21(
-                    outgoingNv21,
-                    incomingNv21,
+            if (outgoingNv12 != null && incomingNv12 != null) {
+                ImageSourceHelper.blendNv12(
+                    outgoingNv12,
+                    incomingNv12,
                     state.transitionProgress,
                     blendBuffer!!,
                     width,
@@ -60,7 +60,7 @@ class StudioCompositor(
                 )
                 frameConsumer(blendBuffer!!, width, height)
             } else {
-                frameConsumer(outgoingNv21 ?: incomingNv21 ?: yuvData, width, height)
+                frameConsumer(outgoingNv12 ?: incomingNv12 ?: yuvData, width, height)
             }
         } else {
             // Not transitioning - route immediately with zero copying
@@ -69,9 +69,9 @@ class StudioCompositor(
                     frameConsumer(yuvData, width, height)
                 }
                 is StudioSource.Image -> {
-                    val imageNv21 = program.nv21Cache
-                    if (imageNv21 != null) {
-                        frameConsumer(imageNv21, width, height)
+                    val imageNv12 = program.activeFrameCache
+                    if (imageNv12 != null) {
+                        frameConsumer(imageNv12, width, height)
                     } else {
                         frameConsumer(yuvData, width, height)
                     }
@@ -80,10 +80,10 @@ class StudioCompositor(
         }
     }
 
-    private fun getSourceNv21(source: StudioSource, currentCameraFrame: ByteArray, width: Int, height: Int): ByteArray? {
+    private fun getSourceNv12(source: StudioSource, currentCameraFrame: ByteArray, width: Int, height: Int): ByteArray? {
         return when (source) {
             is StudioSource.Camera -> currentCameraFrame
-            is StudioSource.Image -> source.nv21Cache ?: getBlackFrame(width, height)
+            is StudioSource.Image -> source.activeFrameCache ?: getBlackFrame(width, height)
         }
     }
 
@@ -111,8 +111,8 @@ class StudioCompositor(
                 val state = studioStateFlow.value
                 if (state.programSource is StudioSource.Image) {
                     val image = state.programSource
-                    val nv21 = image.nv21Cache ?: getBlackFrame(lastCameraWidth, lastCameraHeight)
-                    frameConsumer(nv21, lastCameraWidth, lastCameraHeight)
+                    val nv12 = image.activeFrameCache ?: getBlackFrame(lastCameraWidth, lastCameraHeight)
+                    frameConsumer(nv12, lastCameraWidth, lastCameraHeight)
                 }
                 delay(33) // ~30 fps
             }

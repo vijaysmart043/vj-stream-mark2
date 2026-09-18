@@ -179,8 +179,13 @@ class FlvVideoPacketizer {
                 H264NalParser.NAL_TYPE_SEI, H264NalParser.NAL_TYPE_SLICE -> {
                     sliceNals.add(nal)
                 }
+                H264NalParser.NAL_TYPE_AUD -> {
+                    // AUD is not included in AVCC format
+                }
                 else -> {
-                    sliceNals.add(nal)
+                    if (nal.isNotEmpty()) {
+                        sliceNals.add(nal)
+                    }
                 }
             }
         }
@@ -188,11 +193,17 @@ class FlvVideoPacketizer {
         if (foundSps != null && foundPps != null) {
             setSpsPps(foundSps, foundPps)
         } else if (foundSps != null) {
-            spsBytes = H264NalParser.stripStartCode(foundSps)
-            hasEmittedSequenceHeader = false
+            val cleanSps = H264NalParser.stripStartCode(foundSps)
+            if (!cleanSps.contentEquals(spsBytes)) {
+                spsBytes = cleanSps
+                hasEmittedSequenceHeader = false
+            }
         } else if (foundPps != null) {
-            ppsBytes = H264NalParser.stripStartCode(foundPps)
-            hasEmittedSequenceHeader = false
+            val cleanPps = H264NalParser.stripStartCode(foundPps)
+            if (!cleanPps.contentEquals(ppsBytes)) {
+                ppsBytes = cleanPps
+                hasEmittedSequenceHeader = false
+            }
         }
 
         // If this frame is purely codec configuration (CSD / SPS + PPS without slices)
@@ -228,19 +239,36 @@ class FlvVideoPacketizer {
         val nals = H264NalParser.splitAnnexB(nalData)
         if (nals.isEmpty()) return null
 
+        var foundSps: ByteArray? = null
+        var foundPps: ByteArray? = null
         val sliceNals = ArrayList<ByteArray>(nals.size)
         var detectedKeyframe = isKeyframe
 
         for (nal in nals) {
             when (H264NalParser.getNalType(nal)) {
-                H264NalParser.NAL_TYPE_SPS -> spsBytes = nal
-                H264NalParser.NAL_TYPE_PPS -> ppsBytes = nal
+                H264NalParser.NAL_TYPE_SPS -> foundSps = nal
+                H264NalParser.NAL_TYPE_PPS -> foundPps = nal
                 H264NalParser.NAL_TYPE_IDR -> {
                     detectedKeyframe = true
                     sliceNals.add(nal)
                 }
-                else -> sliceNals.add(nal)
+                H264NalParser.NAL_TYPE_SEI, H264NalParser.NAL_TYPE_SLICE,
+                H264NalParser.NAL_TYPE_DPA, H264NalParser.NAL_TYPE_DPB, H264NalParser.NAL_TYPE_DPC -> {
+                    sliceNals.add(nal)
+                }
+                H264NalParser.NAL_TYPE_AUD -> {
+                    // AUD is ignored in AVCC
+                }
+                else -> {
+                    if (nal.isNotEmpty()) {
+                        sliceNals.add(nal)
+                    }
+                }
             }
+        }
+
+        if (foundSps != null && foundPps != null) {
+            setSpsPps(foundSps, foundPps)
         }
 
         if (sliceNals.isEmpty()) return null
@@ -253,9 +281,10 @@ class FlvVideoPacketizer {
         isKeyframe: Boolean,
         timestampMs: Long
     ): FlvVideoPacket? {
-        if (nals.isEmpty()) return null
+        val validNals = nals.filter { it.isNotEmpty() }
+        if (validNals.isEmpty()) return null
 
-        val payloadSize = 5 + nals.sumOf { 4 + it.size }
+        val payloadSize = 5 + validNals.sumOf { 4 + it.size }
         val baos = ByteArrayOutputStream(payloadSize)
 
         // 1. FLV Video Header (5 bytes)
@@ -269,7 +298,7 @@ class FlvVideoPacketizer {
         baos.write(0x00)
 
         // 2. AVCC NALUs (4 bytes length + NAL unit bytes)
-        for (nal in nals) {
+        for (nal in validNals) {
             writeNaluWithLength(baos, nal)
         }
 
@@ -283,6 +312,7 @@ class FlvVideoPacketizer {
     }
 
     private fun writeNaluWithLength(baos: ByteArrayOutputStream, nal: ByteArray) {
+        if (nal.isEmpty()) return
         val size = nal.size
         baos.write((size shr 24) and 0xFF)
         baos.write((size shr 16) and 0xFF)

@@ -79,14 +79,14 @@ object ImageSourceHelper {
                 decodedBitmap.recycle()
             }
 
-            // Step 5: Pre-generate NV21 frame cache for smooth zero-allocation streaming
-            val nv21Cache = bitmapToNv21(finalBitmap, targetWidth, targetHeight)
+            // Step 5: Pre-generate NV12 frame cache for smooth zero-allocation streaming
+            val nv12Cache = bitmapToNv12(finalBitmap, targetWidth, targetHeight)
 
             StudioSource.Image(
                 uri = uri,
                 bitmap = finalBitmap,
                 name = fileName,
-                nv21Cache = nv21Cache
+                nv12Cache = nv12Cache
             )
         } catch (e: Throwable) {
             Log.e(TAG, "Failed to load image from URI $uri: ${e.message}", e)
@@ -174,10 +174,10 @@ object ImageSourceHelper {
     }
 
     /**
-     * Converts an ARGB_8888 Bitmap to NV21 byte array (YUV420SemiPlanar).
+     * Converts an ARGB_8888 Bitmap to NV12 byte array (YUV420SemiPlanar with U then V).
      */
-    fun bitmapToNv21(bitmap: Bitmap, width: Int, height: Int): ByteArray {
-        val nv21 = ByteArray(width * height * 3 / 2)
+    fun bitmapToNv12(bitmap: Bitmap, width: Int, height: Int): ByteArray {
+        val nv12 = ByteArray(width * height * 3 / 2)
         val argb = IntArray(width * height)
 
         val scaled = if (bitmap.width != width || bitmap.height != height) {
@@ -199,16 +199,17 @@ object ImageSourceHelper {
                 val g = (pixel shr 8) and 0xff
                 val b = pixel and 0xff
 
-                // RGB to YUV standard formula
+                // RGB to YUV BT.601 standard matrix (Studio swing: Y [16..235], UV [16..240])
                 val y = ((66 * r + 129 * g + 25 * b + 128) shr 8) + 16
                 val u = ((-38 * r - 74 * g + 112 * b + 128) shr 8) + 128
                 val v = ((112 * r - 94 * g - 18 * b + 128) shr 8) + 128
 
-                nv21[yIndex++] = (if (y < 0) 0 else if (y > 255) 255 else y).toByte()
+                nv12[yIndex++] = (if (y < 0) 0 else if (y > 255) 255 else y).toByte()
 
+                // NV12 format: Interleaved U (Cb) at even offset, V (Cr) at odd offset
                 if (j % 2 == 0 && i % 2 == 0) {
-                    nv21[uvIndex++] = (if (v < 0) 0 else if (v > 255) 255 else v).toByte()
-                    nv21[uvIndex++] = (if (u < 0) 0 else if (u > 255) 255 else u).toByte()
+                    nv12[uvIndex++] = (if (u < 0) 0 else if (u > 255) 255 else u).toByte()
+                    nv12[uvIndex++] = (if (v < 0) 0 else if (v > 255) 255 else v).toByte()
                 }
             }
         }
@@ -217,13 +218,18 @@ object ImageSourceHelper {
             scaled.recycle()
         }
 
-        return nv21
+        return nv12
     }
 
     /**
-     * Blends two NV21 frames with alpha (0.0 = sourceA, 1.0 = sourceB).
+     * Backward-compatible alias for bitmapToNv12.
      */
-    fun blendNv21(
+    fun bitmapToNv21(bitmap: Bitmap, width: Int, height: Int): ByteArray = bitmapToNv12(bitmap, width, height)
+
+    /**
+     * Blends two NV12 frames with alpha (0.0 = sourceA, 1.0 = sourceB).
+     */
+    fun blendNv12(
         sourceA: ByteArray,
         sourceB: ByteArray,
         alpha: Float,
@@ -243,4 +249,16 @@ object ImageSourceHelper {
             out[i] = blended.toByte()
         }
     }
+
+    /**
+     * Backward-compatible alias for blendNv12.
+     */
+    fun blendNv21(
+        sourceA: ByteArray,
+        sourceB: ByteArray,
+        alpha: Float,
+        out: ByteArray,
+        width: Int,
+        height: Int
+    ) = blendNv12(sourceA, sourceB, alpha, out, width, height)
 }

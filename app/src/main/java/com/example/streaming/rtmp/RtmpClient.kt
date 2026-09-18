@@ -214,6 +214,7 @@ class DefaultRtmpClient(
     @Volatile private var ppsBytes: ByteArray? = null
     @Volatile private var hasSentVideoHeader = false
     @Volatile private var hasSentAudioHeader = false
+    @Volatile private var isDroppingUntilKeyframe = false
 
     private val defaultVideoPacketizer = FlvVideoPacketizer()
     private val defaultAudioPacketizer = FlvAudioPacketizer()
@@ -947,44 +948,82 @@ class DefaultRtmpClient(
     private fun enqueuePacket(packet: RtmpPacket) {
         if (!isStreamingFlag.get()) return
 
-        // Non-blocking attempt to insert
+        val isVideo = packet.messageType == RtmpPacket.TYPE_VIDEO
+        val isAudio = packet.messageType == RtmpPacket.TYPE_AUDIO
+        val isKeyframe = packet.isKeyframe
+
+        // 1. If this is a non-keyframe video packet and the current GOP is compromised, drop it immediately
+        if (isVideo && !isKeyframe && isDroppingUntilKeyframe) {
+            droppedFramesCount.incrementAndGet()
+            listener.onDroppedFrame()
+            return
+        }
+
+        // 2. If this is an IDR keyframe, reset the drop flag so the new GOP starts cleanly
+        if (isVideo && isKeyframe) {
+            isDroppingUntilKeyframe = false
+        }
+
+        // 3. Fast path: non-blocking insert if queue has available capacity
         if (packetQueue.offer(packet)) {
             return
         }
 
-        // Queue is congested: drop oldest non-keyframe video packet to preserve audio and keyframes
+        // 4. Queue is congested: handle backpressure while preserving decoder continuity & audio
         synchronized(packetQueue) {
-            val iterator = packetQueue.iterator()
-            var droppedVideo = false
-            while (iterator.hasNext()) {
-                val candidate = iterator.next()
-                // Only drop non-keyframe video packets
-                if (candidate.messageType == RtmpPacket.TYPE_VIDEO && !candidate.isKeyframe) {
-                    iterator.remove()
+            if (isVideo) {
+                if (isKeyframe) {
+                    // Evict old P-frames to ensure IDR keyframe is enqueued immediately
+                    val iterator = packetQueue.iterator()
+                    while (iterator.hasNext()) {
+                        val candidate = iterator.next()
+                        if (candidate.messageType == RtmpPacket.TYPE_VIDEO && !candidate.isKeyframe) {
+                            iterator.remove()
+                            droppedFramesCount.incrementAndGet()
+                            listener.onDroppedFrame()
+                        }
+                    }
+                    isDroppingUntilKeyframe = false
+                    packetQueue.offer(packet)
+                } else {
+                    // For a P-frame that cannot fit, dropping it breaks the reference chain for the rest of the GOP.
+                    // Enter drop mode for the remainder of this GOP until the next IDR keyframe.
+                    isDroppingUntilKeyframe = true
                     droppedFramesCount.incrementAndGet()
                     listener.onDroppedFrame()
-                    droppedVideo = true
-                    Log.w(TAG, "RTMP queue congested: dropped stale non-keyframe video packet (ts=${candidate.timestamp})")
-                    break
-                }
-            }
+                    Log.w(TAG, "RTMP queue full: dropping P-frame and entering wait-for-keyframe mode to preserve decoder continuity")
 
-            if (!droppedVideo) {
-                // If all queued packets are audio or keyframes, drop oldest non-audio packet if any
-                val secondPass = packetQueue.iterator()
-                while (secondPass.hasNext()) {
-                    val candidate = secondPass.next()
-                    if (candidate.messageType != RtmpPacket.TYPE_AUDIO) {
-                        secondPass.remove()
+                    // Purge queued P-frames of the compromised GOP to relieve network congestion (keep audio & headers)
+                    val iterator = packetQueue.iterator()
+                    while (iterator.hasNext()) {
+                        val candidate = iterator.next()
+                        if (candidate.messageType == RtmpPacket.TYPE_VIDEO && !candidate.isKeyframe) {
+                            iterator.remove()
+                            droppedFramesCount.incrementAndGet()
+                        }
+                    }
+                }
+            } else if (isAudio) {
+                // Audio packet: Evict non-keyframe video if necessary to avoid audio underruns
+                val iterator = packetQueue.iterator()
+                var removedVideo = false
+                while (iterator.hasNext()) {
+                    val candidate = iterator.next()
+                    if (candidate.messageType == RtmpPacket.TYPE_VIDEO && !candidate.isKeyframe) {
+                        iterator.remove()
                         droppedFramesCount.incrementAndGet()
                         listener.onDroppedFrame()
-                        Log.w(TAG, "RTMP queue congested: dropped video packet (key=${candidate.isKeyframe})")
+                        removedVideo = true
                         break
                     }
                 }
+                if (removedVideo) {
+                    isDroppingUntilKeyframe = true
+                }
+                packetQueue.offer(packet)
+            } else {
+                packetQueue.offer(packet)
             }
-
-            packetQueue.offer(packet)
         }
     }
 
@@ -1139,6 +1178,7 @@ class DefaultRtmpClient(
         socket = null
         hasSentVideoHeader = false
         hasSentAudioHeader = false
+        isDroppingUntilKeyframe = false
         spsBytes = null
         ppsBytes = null
         defaultVideoPacketizer.reset()

@@ -78,7 +78,9 @@ class VideoEncoder(
     private var pps: ByteArray? = null
 
     // Presentation timestamp generator
-    private val timestampGenerator = VideoTimestampGenerator()
+    private val timestampGenerator = VideoTimestampGenerator(fps = fps)
+    @Volatile
+    private var lastEmittedTimestampUs = -1L
 
     // Real-time statistics counters
     private val totalEncodedFrames = AtomicLong(0)
@@ -137,6 +139,7 @@ class VideoEncoder(
                 initCodec()
                 isRunning.set(true)
                 timestampGenerator.reset()
+                lastEmittedTimestampUs = -1L
                 lastFpsTimestampMs = System.currentTimeMillis()
                 framesSinceLastFpsCalc = 0
                 bytesSinceLastFpsCalc = 0L
@@ -290,54 +293,92 @@ class VideoEncoder(
                 }
                 else -> {
                     if (outputIndex >= 0) {
-                        val outputBuffer = encoder.getOutputBuffer(outputIndex)
-                        if (outputBuffer != null && bufferInfo.size > 0) {
-                            outputBuffer.position(bufferInfo.offset)
-                            outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
+                        try {
+                            val outputBuffer = encoder.getOutputBuffer(outputIndex)
+                            if (outputBuffer != null && bufferInfo.size > 0) {
+                                val offset = bufferInfo.offset.coerceAtLeast(0)
+                                val available = (outputBuffer.capacity() - offset).coerceAtLeast(0)
+                                val size = bufferInfo.size.coerceAtMost(available)
 
-                            val outData = ByteArray(bufferInfo.size)
-                            outputBuffer.get(outData)
+                                if (size > 0) {
+                                    outputBuffer.position(offset)
+                                    outputBuffer.limit(offset + size)
 
-                            val isConfig = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
-                            val isKeyframe = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0
+                                    // Deep copy encoded video bytes into an independent ByteArray BEFORE release
+                                    val outData = ByteArray(size)
+                                    outputBuffer.get(outData)
 
-                            if (isConfig) {
-                                parseAnnexBSpsPps(outData)
-                            } else {
-                                val nals = H264NalParser.splitAnnexB(outData)
-                                for (nal in nals) {
-                                    if (nal.isNotEmpty()) {
-                                        val nalType = H264NalParser.getNalType(nal)
-                                        val frameIsKey = isKeyframe || nalType == H264NalParser.NAL_TYPE_IDR
+                                    val isConfig = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
+                                    val isKeyframe = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_KEY_FRAME) != 0
 
+                                    if (isConfig) {
+                                        parseAnnexBSpsPps(outData)
+                                    } else {
+                                        val nals = H264NalParser.splitAnnexB(outData)
+                                        val hasIdr = nals.any { H264NalParser.getNalType(it) == H264NalParser.NAL_TYPE_IDR }
+                                        val frameIsKey = isKeyframe || hasIdr
+
+                                        // Check for in-band SPS/PPS updates if present
+                                        for (nal in nals) {
+                                            when (H264NalParser.getNalType(nal)) {
+                                                H264NalParser.NAL_TYPE_SPS -> sps = nal
+                                                H264NalParser.NAL_TYPE_PPS -> pps = nal
+                                            }
+                                        }
+                                        val s = sps
+                                        val p = pps
+                                        if (s != null && p != null) {
+                                            listener.onSpsPps(s, p)
+                                        }
+
+                                        // Ensure output PTS is strictly monotonic, non-negative, and has no duplicate milliseconds
+                                        val rawPtsUs = bufferInfo.presentationTimeUs
+                                        val frameDeltaUs = if (fps > 0) (1_000_000L / fps) else 33_333L
+
+                                        var finalPtsUs = if (rawPtsUs > 0 && rawPtsUs > lastEmittedTimestampUs) {
+                                            rawPtsUs
+                                        } else if (lastEmittedTimestampUs < 0) {
+                                            if (rawPtsUs >= 0) rawPtsUs else 0L
+                                        } else {
+                                            lastEmittedTimestampUs + frameDeltaUs
+                                        }
+
+                                        // Eliminate duplicate millisecond values (FLV/RTMP packets use millisecond timestamps)
+                                        val lastEmittedMs = if (lastEmittedTimestampUs < 0) -1L else (lastEmittedTimestampUs / 1000L)
+                                        if ((finalPtsUs / 1000L) <= lastEmittedMs) {
+                                            finalPtsUs = (lastEmittedMs + 1L) * 1000L
+                                        }
+                                        lastEmittedTimestampUs = finalPtsUs
+
+                                        // Encapsulate in an immutable frame holding only independent memory
                                         val encodedFrame = EncodedVideoFrame(
-                                            nalData = nal,
+                                            nalData = outData,
                                             isKeyframe = frameIsKey,
                                             isConfig = false,
-                                            timestampUs = bufferInfo.presentationTimeUs,
-                                            size = nal.size
+                                            timestampUs = finalPtsUs,
+                                            size = outData.size
                                         )
 
                                         totalEncodedFrames.incrementAndGet()
                                         if (frameIsKey) {
                                             totalKeyframes.incrementAndGet()
                                         }
-                                        totalBytesEncoded.addAndGet(nal.size.toLong())
+                                        totalBytesEncoded.addAndGet(outData.size.toLong())
 
                                         framesSinceLastFpsCalc++
-                                        bytesSinceLastFpsCalc += nal.size
+                                        bytesSinceLastFpsCalc += outData.size
 
-                                        // Dispatch to listeners
+                                        // Dispatch copied frame to downstream packetizers
                                         listener.onEncodedFrame(encodedFrame)
-                                        listener.onEncodedFrame(nal, frameIsKey, encodedFrame.timestampMs)
+                                        listener.onEncodedFrame(outData, frameIsKey, encodedFrame.timestampMs)
                                     }
+
+                                    trackMetrics()
                                 }
                             }
-
-                            trackMetrics()
+                        } finally {
+                            encoder.releaseOutputBuffer(outputIndex, false)
                         }
-
-                        encoder.releaseOutputBuffer(outputIndex, false)
 
                         if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                             break
@@ -413,8 +454,8 @@ class VideoEncoder(
     }
 
     private fun parseFormatSpsPps(format: MediaFormat) {
-        val csd0 = format.getByteBuffer("csd-0")
-        val csd1 = format.getByteBuffer("csd-1")
+        val csd0 = format.getByteBuffer("csd-0")?.duplicate()
+        val csd1 = format.getByteBuffer("csd-1")?.duplicate()
         if (csd0 != null && csd1 != null) {
             val spsBytes = ByteArray(csd0.remaining())
             csd0.get(spsBytes)
