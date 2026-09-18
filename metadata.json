@@ -1,0 +1,6 @@
+{
+  "name": "VJStream",
+  "description": "OBS-style mobile live streaming application for YouTube Live with landscape camera preview, hardware encoding, and RTMP streaming",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
