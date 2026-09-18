@@ -9,7 +9,6 @@ import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -33,8 +32,6 @@ import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -88,7 +85,6 @@ fun MainStreamingScreen(
     val streamStats by streamingManager.statsFlow.collectAsState()
     val streamConfig by settingsRepository.configFlow.collectAsState()
     val streamError by streamingManager.errorMessageFlow.collectAsState()
-    val errorInfo by streamingManager.errorInfoFlow.collectAsState()
     val studioState by studioManager.studioStateFlow.collectAsState()
 
     val audioState by streamingManager.audioCaptureManager.stateFlow.collectAsState()
@@ -405,109 +401,49 @@ fun MainStreamingScreen(
             )
         }
 
-        // Error Banner / Debug Diagnostic Card
+        // Error Banner
         AnimatedVisibility(
-            visible = errorInfo != null || streamError != null,
+            visible = streamError != null,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 40.dp)
+                .padding(top = 44.dp)
         ) {
-            val stage = errorInfo?.stage ?: "RTMP"
-            val errorType = errorInfo?.errorType ?: "CONNECTION_FAILED"
-            val message = errorInfo?.message ?: streamError ?: "Unknown error"
-
-            Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xF07F1D1D)),
-                shape = RoundedCornerShape(8.dp),
-                border = BorderStroke(1.dp, StreamRed),
-                modifier = Modifier
-                    .fillMaxWidth(0.85f)
-                    .testTag("stream_error_card")
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
+            streamError?.let { err ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth(0.9f)
+                        .background(Color(0xE67F1D1D), RoundedCornerShape(8.dp))
+                        .border(1.dp, StreamRed, RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.ErrorOutline,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "STREAM ERROR",
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 0.5.sp
-                            )
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Button(
-                                onClick = {
-                                    streamingManager.clearError()
-                                    if (hasCameraPermission && hasAudioPermission) {
-                                        streamingManager.startStream(streamConfig)
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = StreamCyan),
-                                shape = RoundedCornerShape(4.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                modifier = Modifier
-                                    .height(28.dp)
-                                    .testTag("manual_retry_button")
-                            ) {
-                                Text(
-                                    "RETRY MANUALLY",
-                                    color = Color.Black,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
-                            Button(
-                                onClick = { streamingManager.clearError() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0x44FFFFFF)),
-                                shape = RoundedCornerShape(4.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                modifier = Modifier
-                                    .height(28.dp)
-                                    .testTag("dismiss_error_button")
-                            ) {
-                                Text(
-                                    "DISMISS",
-                                    color = Color.White,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-                        }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Icon(
+                            imageVector = Icons.Default.ErrorOutline,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = err,
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
 
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Text(
-                        text = "Stage: $stage ($errorType)",
-                        color = Color(0xFFFFD54F),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Reason: $message",
-                        color = Color(0xFFF1F5F9),
-                        fontSize = 11.sp,
-                        lineHeight = 14.sp
-                    )
+                    Button(
+                        onClick = { streamingManager.clearError() },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0x33FFFFFF)),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Text("Dismiss", fontSize = 10.sp)
+                    }
                 }
             }
         }

@@ -19,7 +19,6 @@ data class RtmpPacket(
         const val CSID_COMMAND = 3
         const val CSID_AUDIO = 4
         const val CSID_VIDEO = 6
-        const val CSID_STREAM = 8
     }
 
     override fun equals(other: Any?): Boolean {
