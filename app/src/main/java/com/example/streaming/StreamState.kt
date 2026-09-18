@@ -43,7 +43,12 @@ data class StreamStatistics(
     val videoPacketsSent: Long = 0L,
     val audioPacketsSent: Long = 0L,
     val totalBytesSent: Long = 0L,
-    val connectionState: String = "OFFLINE"
+    val connectionState: String = "OFFLINE",
+    val videoFramesEncoded: Long = 0L,
+    val audioFramesEncoded: Long = 0L,
+    val videoBytesSent: Long = 0L,
+    val audioBytesSent: Long = 0L,
+    val rtmpBytesSent: Long = 0L
 ) {
     val durationFormatted: String
         get() {

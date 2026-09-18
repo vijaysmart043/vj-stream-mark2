@@ -91,7 +91,8 @@ class StreamingManager(
         listener = object : AudioCaptureManager.Listener {
             override fun onAudioFrame(frame: AudioFrame) {
                 if (isStreamingActive.get()) {
-                    audioEncoder?.encodePcm(frame.data, frame.length, frame.timestampUs)
+                    // Pass -1L to generate monotonic timestamp relative to stream start
+                    audioEncoder?.encodePcm(frame.data, frame.length, -1L)
                 }
             }
 
@@ -112,6 +113,13 @@ class StreamingManager(
             }
         }
     )
+
+    // Real-time telemetry counters
+    val videoFramesEncoded = AtomicLong(0)
+    val audioFramesEncoded = AtomicLong(0)
+    val videoBytesSent = AtomicLong(0)
+    val audioBytesSent = AtomicLong(0)
+    val rtmpBytesSent = AtomicLong(0)
 
     private var currentConfig: YouTubeStreamConfig? = null
     private val isStreamingActive = AtomicBoolean(false)
@@ -231,44 +239,30 @@ class StreamingManager(
                     }
 
                     override fun onEncodedFrame(frame: EncodedVideoFrame) {
+                        videoFramesEncoded.incrementAndGet()
+                        val cfg = currentConfig?.videoPreset
+                        val w = cfg?.width ?: 1280
+                        val h = cfg?.height ?: 720
+                        Log.d(TAG, "VIDEO_ENCODED width=$w height=$h pts=${frame.timestampUs / 1000}ms size=${frame.size}")
+
                         if (!isStandAloneTest && isTransmissionEnabled.get()) {
                             val packets = videoPacketizer.packetize(frame)
                             for (packet in packets) {
                                 rtmpClient?.sendFlvVideoPacket(packet)
+                                val sentBytes = packet.payload.size.toLong()
+                                videoBytesSent.addAndGet(sentBytes)
+                                rtmpBytesSent.addAndGet(sentBytes)
                                 if (packet.isSequenceHeader) {
                                     Log.i(TAG, "AVC sequence header sent")
                                 } else {
-                                    val count = videoPacketsSent.incrementAndGet()
-                                    if (packet.isKeyframe || count % 90 == 1L) {
-                                        Log.d(TAG, "Video packet sent (ts=${packet.timestampMs}ms, key=${packet.isKeyframe})")
-                                    }
+                                    videoPacketsSent.incrementAndGet()
                                 }
                             }
                         }
                     }
 
                     override fun onEncodedFrame(nalData: ByteArray, isKeyframe: Boolean, timestampMs: Long) {
-                        if (!isStandAloneTest && isTransmissionEnabled.get()) {
-                            val frame = EncodedVideoFrame(
-                                nalData = nalData,
-                                isKeyframe = isKeyframe,
-                                isConfig = false,
-                                timestampUs = timestampMs * 1000L,
-                                size = nalData.size
-                            )
-                            val packets = videoPacketizer.packetize(frame)
-                            for (packet in packets) {
-                                rtmpClient?.sendFlvVideoPacket(packet)
-                                if (packet.isSequenceHeader) {
-                                    Log.i(TAG, "AVC sequence header sent")
-                                } else {
-                                    val count = videoPacketsSent.incrementAndGet()
-                                    if (packet.isKeyframe || count % 90 == 1L) {
-                                        Log.d(TAG, "Video packet sent (ts=${packet.timestampMs}ms, key=${packet.isKeyframe})")
-                                    }
-                                }
-                            }
-                        }
+                        // Handled by onEncodedFrame(frame: EncodedVideoFrame) to prevent duplicate packetization
                     }
 
                     override fun onEncoderStateChanged(state: VideoEncoderState) {
@@ -323,8 +317,14 @@ class StreamingManager(
             videoPacketizer.reset()
             audioPacketizer.reset()
             isTransmissionEnabled.set(false)
+            videoFramesEncoded.set(0)
+            audioFramesEncoded.set(0)
             videoPacketsSent.set(0)
             audioPacketsSent.set(0)
+            videoBytesSent.set(0)
+            audioBytesSent.set(0)
+            rtmpBytesSent.set(0)
+            currentTotalBytesSent = 0L
 
             _statusFlow.value = StreamStatus.CONNECTING
             _statsFlow.value = _statsFlow.value.copy(statusMessage = "Connecting to YouTube Live...")
@@ -374,40 +374,25 @@ class StreamingManager(
                     }
 
                     override fun onEncodedAudio(aacData: ByteArray, timestampMs: Long) {
-                        if (isTransmissionEnabled.get()) {
-                            val frame = EncodedAudioFrame(
-                                aacData = aacData,
-                                isConfig = false,
-                                timestampUs = timestampMs * 1000L,
-                                size = aacData.size
-                            )
-                            val packets = audioPacketizer.packetize(frame)
-                            for (packet in packets) {
-                                rtmpClient?.sendFlvAudioPacket(packet)
-                                if (packet.isSequenceHeader) {
-                                    Log.i(TAG, "AAC sequence header sent")
-                                } else {
-                                    val count = audioPacketsSent.incrementAndGet()
-                                    if (count % 150 == 1L) {
-                                        Log.d(TAG, "Audio packet sent (ts=${packet.timestampMs}ms)")
-                                    }
-                                }
-                            }
-                        }
+                        // Handled by onEncodedFrame(frame: EncodedAudioFrame) to prevent duplicate packetization
                     }
 
                     override fun onEncodedFrame(frame: EncodedAudioFrame) {
+                        val encCount = audioFramesEncoded.incrementAndGet()
+                        if (encCount % 60 == 1L) {
+                            Log.d(TAG, "AUDIO_ENCODED sampleRate=${frame.sampleRate} channels=${frame.channelCount} pts=${frame.timestampUs / 1000}ms size=${frame.size}")
+                        }
                         if (isTransmissionEnabled.get()) {
                             val packets = audioPacketizer.packetize(frame)
                             for (packet in packets) {
                                 rtmpClient?.sendFlvAudioPacket(packet)
+                                val sentBytes = packet.payload.size.toLong()
+                                audioBytesSent.addAndGet(sentBytes)
+                                rtmpBytesSent.addAndGet(sentBytes)
                                 if (packet.isSequenceHeader) {
                                     Log.i(TAG, "AAC sequence header sent")
                                 } else {
-                                    val count = audioPacketsSent.incrementAndGet()
-                                    if (count % 150 == 1L) {
-                                        Log.d(TAG, "Audio packet sent (ts=${packet.timestampMs}ms)")
-                                    }
+                                    audioPacketsSent.incrementAndGet()
                                 }
                             }
                         }
@@ -493,12 +478,19 @@ class StreamingManager(
 
     override fun onConnectionFailed(reason: String) {
         mainHandler.post {
-            Log.e(TAG, "RTMP connection failed: $reason")
-            if (isStreamingActive.get()) {
+            val diagnostics = rtmpClient?.getDiagnostics()
+            val report = diagnostics?.formatReport() ?: "No diagnostics available"
+            Log.e(TAG, "RTMP connection failed: $reason\n$report")
+            val isAuthOrBadName = reason.contains("BadName", ignoreCase = true) ||
+                    reason.contains("rejected", ignoreCase = true) ||
+                    reason.contains("Stream key", ignoreCase = true)
+
+            if (isStreamingActive.get() && !isAuthOrBadName) {
                 attemptReconnect(reason)
             } else {
                 _statusFlow.value = StreamStatus.ERROR
                 _errorMessageFlow.value = "Connection failed: $reason"
+                stopStream()
             }
         }
     }
@@ -619,6 +611,11 @@ class StreamingManager(
                                 audioPacketsSent = audioPacketsSent.get(),
                                 totalBytesSent = currentTotalBytesSent,
                                 connectionState = _rtmpConnectionStateFlow.value.name,
+                                videoFramesEncoded = videoFramesEncoded.get(),
+                                audioFramesEncoded = audioFramesEncoded.get(),
+                                videoBytesSent = videoBytesSent.get(),
+                                audioBytesSent = audioBytesSent.get(),
+                                rtmpBytesSent = if (rtmpBytesSent.get() > 0) rtmpBytesSent.get() else currentTotalBytesSent,
                                 statusMessage = "Live on YouTube"
                             )
                         }

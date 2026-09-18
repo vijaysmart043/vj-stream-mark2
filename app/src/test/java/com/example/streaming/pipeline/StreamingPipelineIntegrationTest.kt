@@ -99,6 +99,7 @@ class StreamingPipelineIntegrationTest {
         }
 
         override fun setSpsPps(sps: ByteArray, pps: ByteArray) {}
+        override fun getDiagnostics(): com.example.streaming.rtmp.RtmpDiagnostics = com.example.streaming.rtmp.RtmpDiagnostics()
         override fun sendVideo(frame: EncodedVideoFrame) {}
         override fun sendVideo(nalData: ByteArray, isKeyframe: Boolean, timestampMs: Long) {}
 
@@ -465,5 +466,53 @@ class StreamingPipelineIntegrationTest {
         assertTrue(fakeRtmpClient.isDisconnected)
         assertFalse(fakeRtmpClient.isConnected)
         assertEquals(RtmpConnectionState.DISCONNECTED, fakeRtmpClient.currentState)
+    }
+
+    // 9. TELEMETRY AND METRICS TESTS
+    @Test
+    fun testTelemetryCountersAndStateFlow() {
+        val config = createValidConfig()
+        streamingManager.startStream(config)
+        ShadowLooper.idleMainLooper()
+
+        streamingManager.videoFramesEncoded.incrementAndGet()
+        streamingManager.audioFramesEncoded.incrementAndGet()
+        streamingManager.videoBytesSent.addAndGet(1024)
+        streamingManager.audioBytesSent.addAndGet(256)
+        streamingManager.rtmpBytesSent.addAndGet(1280)
+
+        assertEquals(1L, streamingManager.videoFramesEncoded.get())
+        assertEquals(1L, streamingManager.audioFramesEncoded.get())
+        assertEquals(1024L, streamingManager.videoBytesSent.get())
+        assertEquals(256L, streamingManager.audioBytesSent.get())
+        assertEquals(1280L, streamingManager.rtmpBytesSent.get())
+    }
+
+    // 10. DIAGNOSTICS FORMAT TESTS
+    @Test
+    fun testYouTubeDiagnosticsReport() {
+        val diag = com.example.streaming.rtmp.RtmpDiagnostics(
+            failedStage = "PUBLISH",
+            lastSuccessfulStage = "CREATE_STREAM_SUCCESS",
+            rtmpMessageType = 20,
+            rtmpMessageStreamId = 1,
+            videoFramesEncoded = 150,
+            audioFramesEncoded = 300,
+            videoBytesSent = 50000,
+            audioBytesSent = 12000,
+            rtmpBytesSent = 63000,
+            lastServerResponse = "NetStream.Publish.BadName"
+        )
+        val report = diag.formatReport()
+        assertTrue(report.contains("FAILED_STAGE: PUBLISH"))
+        assertTrue(report.contains("LAST_SUCCESSFUL_STAGE: CREATE_STREAM_SUCCESS"))
+        assertTrue(report.contains("RTMP_MESSAGE_TYPE: 20"))
+        assertTrue(report.contains("RTMP_MESSAGE_STREAM_ID: 1"))
+        assertTrue(report.contains("VIDEO_FRAMES_ENCODED: 150"))
+        assertTrue(report.contains("AUDIO_FRAMES_ENCODED: 300"))
+        assertTrue(report.contains("VIDEO_BYTES_SENT: 50000"))
+        assertTrue(report.contains("AUDIO_BYTES_SENT: 12000"))
+        assertTrue(report.contains("RTMP_BYTES_SENT: 63000"))
+        assertTrue(report.contains("LAST_SERVER_RESPONSE: NetStream.Publish.BadName"))
     }
 }
